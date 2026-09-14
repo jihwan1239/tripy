@@ -159,6 +159,22 @@
   .leg .legmeta{ font-size:11px; color:var(--muted-2); margin-top:6px; line-height:1.5; }
   .leg .legmeta .off{ color:var(--red); font-weight:600; }
 
+  /* 경로 상세 (노선 · 출발시각 · 요금) */
+  .route-detail{ margin-top:9px; }
+  .route-detail:empty{ display:none; }
+  .rd-head{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12px; }
+  .rd-time{ font-family:var(--font-mono); font-weight:600; color:var(--ink); }
+  .rd-fare{ font-family:var(--font-mono); font-weight:600; color:var(--ink);
+    background:var(--tint); border-radius:999px; padding:2px 9px; }
+  .rd-board{ font-size:11.5px; color:var(--red); font-weight:600; }
+  .rd-dot{ color:var(--muted-2); }
+  .rd-chain{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px; }
+  .rd-seg{ display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600;
+    border:1px solid var(--line-2); border-radius:7px; padding:4px 8px; color:var(--ink); background:#fff; }
+  .rd-seg .icon{ width:12px; height:12px; }
+  .rd-seg.walk{ border-style:dashed; color:var(--muted); }
+  .rd-arrow{ color:var(--muted-2); font-size:12px; }
+
   .add-btn{ width:100%; padding:14px; border-radius:var(--r-md); border:1.5px dashed var(--line-2);
     background:#fff; color:var(--ink); font-weight:700; font-size:13.5px; cursor:pointer; margin-top:14px; }
   .form-card{ background:#fff; border-radius:var(--r-md); padding:18px; margin-top:12px; box-shadow:var(--shadow-card); }
@@ -426,12 +442,13 @@ function mountIcons(root){ (root||document).querySelectorAll('[data-i]').forEach
 /* ================= DEFAULT DATA ================= */
 const CATS = { "이동":"plane","식사":"food","관광":"camera","숙소":"bed","휴식":"cup","선택":"star" };
 const MODES = [
-  { key:'walk',  label:'도보',  icon:'walk',  kmh:4.5, fixed:0, g:'WALKING' },
-  { key:'metro', label:'지하철', icon:'metro', kmh:33,  fixed:8, g:'TRANSIT' },
-  { key:'bus',   label:'버스',  icon:'bus',   kmh:20,  fixed:7, g:'TRANSIT' },
-  { key:'taxi',  label:'택시',  icon:'taxi',  kmh:32,  fixed:4, g:'DRIVING' },
-  { key:'car',   label:'렌터카', icon:'car',   kmh:45,  fixed:3, g:'DRIVING' }
+  { key:'walk',    label:'도보',   icon:'walk',   kmh:4.5, fixed:0, g:'WALKING' },
+  { key:'transit', label:'대중교통', icon:'metro', kmh:25,  fixed:8, g:'TRANSIT' },
+  { key:'taxi',    label:'택시',   icon:'taxi',   kmh:32,  fixed:4, g:'DRIVING' },
+  { key:'car',     label:'렌터카',  icon:'car',    kmh:45,  fixed:3, g:'DRIVING' }
 ];
+/* 예전 버전에서 저장된 'metro' / 'bus'를 '대중교통'으로 합칩니다 */
+function normalizeMode(m){ return (m==='metro'||m==='bus') ? 'transit' : (m||'walk'); }
 
 function defaultTrip(){
   let u = 1;
@@ -442,8 +459,8 @@ function defaultTrip(){
     updatedAt: 0,
     days: [
       { id:1, iso:"2026-09-19", label:"시내 구경", stops:[
-        {id:u++, time:"14:00", name:"신치토세 공항 도착", note:"홋카이도에서의 첫 발", cat:"이동", place:"치토세시 비비", lat:42.7791317, lng:141.6866364, rating:4.3, ratingCount:"1.9만", mode:'metro'},
-        {id:u++, time:"15:00", name:"공항 라멘 골목 점심", note:"이치겐, 테시카가, 에비소바 중 선택", cat:"식사", place:"신치토세공항 3F 라멘도조", lat:42.7879688, lng:141.680236, rating:4.0, ratingCount:"1.3천", mode:'metro'},
+        {id:u++, time:"14:00", name:"신치토세 공항 도착", note:"홋카이도에서의 첫 발", cat:"이동", place:"치토세시 비비", lat:42.7791317, lng:141.6866364, rating:4.3, ratingCount:"1.9만", mode:'transit'},
+        {id:u++, time:"15:00", name:"공항 라멘 골목 점심", note:"이치겐, 테시카가, 에비소바 중 선택", cat:"식사", place:"신치토세공항 3F 라멘도조", lat:42.7879688, lng:141.680236, rating:4.0, ratingCount:"1.3천", mode:'transit'},
         {id:u++, time:"16:00", name:"숙소 체크인", note:"DAITO residence 중앙구역소앞", cat:"숙소", place:"삿포로 주오구 미나미3조니시", lat:43.054739, lng:141.3399746, rating:5.0, ratingCount:"1", mode:'walk'},
         {id:u++, time:"17:00", name:"오도리공원 산책", note:"쇼핑 및 시내 구경", cat:"관광", place:"삿포로 주오구 오도리니시", lat:43.0607521, lng:141.3544308, rating:4.5, ratingCount:"3.8천", mode:'walk'},
         {id:u++, time:"20:00", name:"라마이에서 저녁", note:"삿포로식 수프카레, 숙소 근처", cat:"식사", place:"삿포로 주오구 미나미4조니시", lat:43.054725, lng:141.3434414, rating:4.4, ratingCount:"2.6천", mode:'walk'},
@@ -460,7 +477,7 @@ function defaultTrip(){
         {id:u++, time:"07:00", name:"골드짐 투어 (선택)", note:"위치 미정, 정해지면 추가 예정", cat:"선택", tbd:true, mode:'walk'},
         {id:u++, time:"09:00", name:"오도리공원, 기념품 쇼핑", note:"삿포로 TV타워 일대", cat:"관광", place:"삿포로 주오구 오도리니시", lat:43.0607521, lng:141.3544308, rating:4.5, ratingCount:"3.8천", mode:'walk'},
         {id:u++, time:"10:00", name:"니조 시장", note:"신선 수산물 시장 구경", cat:"관광", place:"삿포로 주오구 미나미3조히가시", lat:43.058299, lng:141.358446, rating:3.8, ratingCount:"1.4만", mode:'walk'},
-        {id:u++, time:"11:00", name:"카이센동 점심", note:"오이소 또는 돈베이", cat:"식사", place:"니조시장 내", lat:43.0585776, lng:141.3589332, rating:4.1, ratingCount:"1.7천", mode:'metro'},
+        {id:u++, time:"11:00", name:"카이센동 점심", note:"오이소 또는 돈베이", cat:"식사", place:"니조시장 내", lat:43.0585776, lng:141.3589332, rating:4.1, ratingCount:"1.7천", mode:'transit'},
         {id:u++, time:"13:00", name:"공항으로 이동", note:"신치토세 공항, 귀국", cat:"이동", place:"치토세시 비비", lat:42.7791317, lng:141.6866364, rating:4.3, ratingCount:"1.9만"}
       ]}
     ]
@@ -595,7 +612,9 @@ async function pullRemote(quiet){
     const remote = await cloudGet();
     if(remote && (remote.updatedAt||0) > (TRIP.updatedAt||0)){
       if(dayFormOpen || editingStopId!==null) return;
-      TRIP = remote; writeLocal();
+      TRIP = remote;
+      TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
+      writeLocal();
       if(!dayById(activeDayId)) activeDayId = TRIP.days[0] ? TRIP.days[0].id : null;
       activeStopId=null;
       refreshAll();
@@ -807,54 +826,146 @@ function buildLeg(from,to){
   const leg=document.createElement('div'); leg.className='leg';
   const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
   const km = both? haversineKm(from,to):null;
-  const cur = from.mode||'walk';
+  const cur = normalizeMode(from.mode);
+
   const modesHtml = MODES.map(m=>{
     const mins = both? estimateMinutes(km,m.key):null;
     return `<button class="mode ${m.key===cur?'active':''}" data-mode="${m.key}">
       <span class="icon">${iconSvg(m.icon)}</span>${m.label}
       ${mins!=null? `<span class="mins" data-mins="${m.key}">${fmtMin(mins)}</span>`:''}</button>`;
   }).join('');
+
   let meta;
   if(!both) meta='양쪽 위치가 모두 정해지면 소요시간이 계산돼요';
-  else if(HAS_DIR) meta=`직선거리 약 ${km.toFixed(1)}km · 실제 경로 소요시간을 불러오는 중입니다`;
-  else meta=`직선거리 약 ${km.toFixed(1)}km · <span class="off">경로 안내 ${DISABLED_MSG}</span> 거리 기반 추정치로 표시됩니다`;
+  else if(HAS_DIR) meta=`직선거리 약 ${km.toFixed(1)}km · 실제 경로를 불러오는 중입니다`;
+  else meta=`직선거리 약 ${km.toFixed(1)}km · <span class="off">경로 안내 ${DISABLED_MSG}</span> 거리 기반 추정치이며 노선·요금 정보는 표시되지 않아요`;
+
   leg.innerHTML=`<div class="rail"><span></span></div>
-    <div class="legbody"><div class="modes">${modesHtml}</div><div class="legmeta">${meta}</div></div>`;
+    <div class="legbody">
+      <div class="modes">${modesHtml}</div>
+      <div class="route-detail" id="rd-${from.id}"></div>
+      <div class="legmeta">${meta}</div>
+    </div>`;
+
   leg.querySelectorAll('.mode').forEach(btn=>{
     btn.addEventListener('click', ()=>{ from.mode=btn.dataset.mode; markChanged(); renderScheduleScreen(); });
   });
+
   if(both && HAS_DIR) fetchDirectionsForLeg(from,to,leg,km);
   return leg;
 }
 
+/* 일정 날짜/시각을 실제 Date로 (예: 2026-09-19 + "14:00") */
+function stopDateTime(iso, hhmm){
+  if(!iso || !hhmm) return new Date();
+  const d = new Date(`${iso}T${hhmm}:00`);
+  return isNaN(d) ? new Date() : d;
+}
+
+function vehicleIcon(type){
+  const t = String(type||'').toUpperCase();
+  if(t.includes('SUBWAY') || t.includes('METRO')) return 'metro';
+  if(t.includes('BUS')) return 'bus';
+  if(t.includes('TRAM') || t.includes('RAIL') || t.includes('TRAIN')) return 'metro';
+  return 'metro';
+}
+
 function fetchDirectionsForLeg(from,to,legEl,km){
   if(!dirService) return;
-  const metaEl=legEl.querySelector('.legmeta');
+  const metaEl   = legEl.querySelector('.legmeta');
+  const detailEl = legEl.querySelector('.route-detail');
+  const dayIso   = (currentDay()||{}).iso;
+  const depart   = stopDateTime(dayIso, from.time);
+
   const needed=[...new Set(MODES.map(m=>m.g))];
   let pending=needed.length; const results={};
+
   needed.forEach(g=>{
-    const ck=`${from.lat},${from.lng}|${to.lat},${to.lng}|${g}`;
+    const ck=`${from.lat},${from.lng}|${to.lat},${to.lng}|${g}|${dayIso}|${from.time}`;
     if(dirCache[ck]!==undefined){ results[g]=dirCache[ck]; if(--pending===0) apply(); return; }
     const req={ origin:{lat:from.lat,lng:from.lng}, destination:{lat:to.lat,lng:to.lng}, travelMode:google.maps.TravelMode[g] };
-    if(g==='TRANSIT') req.transitOptions={ departureTime:new Date() };
+    if(g==='TRANSIT') req.transitOptions={ departureTime: depart };
     dirService.route(req,(res,status)=>{
-      let mins=null;
-      if(status==='OK'&&res.routes[0]&&res.routes[0].legs[0]) mins=Math.round(res.routes[0].legs[0].duration.value/60);
-      dirCache[ck]=mins; results[g]=mins;
+      let out=null;
+      if(status==='OK' && res.routes[0] && res.routes[0].legs[0]){
+        const route=res.routes[0], lg=route.legs[0];
+        out = {
+          mins: Math.round(lg.duration.value/60),
+          fare: route.fare ? route.fare.text : null,
+          depart: lg.departure_time ? lg.departure_time.text : null,
+          arrive: lg.arrival_time ? lg.arrival_time.text : null,
+          steps: (lg.steps||[]).map(st=>{
+            if(st.travel_mode==='TRANSIT' && st.transit){
+              const line=st.transit.line||{};
+              return {
+                kind:'transit',
+                name: line.short_name || line.name || '노선',
+                full: line.name || '',
+                vehicle: (line.vehicle && (line.vehicle.type || line.vehicle.name)) || '',
+                color: line.color || null,
+                from: (st.transit.departure_stop||{}).name || '',
+                to: (st.transit.arrival_stop||{}).name || '',
+                depart: st.transit.departure_time ? st.transit.departure_time.text : null,
+                stops: st.transit.num_stops || 0
+              };
+            }
+            return { kind:'walk', mins: Math.round((st.duration? st.duration.value:0)/60) };
+          })
+        };
+      }
+      dirCache[ck]=out; results[g]=out;
       if(--pending===0) apply();
     });
   });
+
   function apply(){
     let anyReal=false;
     MODES.forEach(m=>{
       const el=legEl.querySelector(`.mins[data-mins="${m.key}"]`);
       if(!el) return;
-      const v=results[m.g];
-      if(v!=null){ el.textContent=fmtMin(v); anyReal=true; }
+      const r=results[m.g];
+      if(r && r.mins!=null){ el.textContent=fmtMin(r.mins); anyReal=true; }
     });
-    metaEl.innerHTML = anyReal
-      ? `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준 소요시간`
-      : `직선거리 약 ${km.toFixed(1)}km · 경로를 찾지 못해 추정치로 표시됩니다`;
+
+    const cur = normalizeMode(from.mode);
+    const r = results[(MODES.find(m=>m.key===cur)||MODES[0]).g];
+
+    if(r){
+      const bits=[];
+      if(r.depart && r.arrive) bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
+      if(r.fare) bits.push(`<span class="rd-fare">${esc(r.fare)}</span>`);
+
+      let chain='';
+      if(cur==='transit' && r.steps && r.steps.length){
+        const parts = r.steps.filter(st=> st.kind==='transit' || st.mins>=1).map(st=>{
+          if(st.kind==='walk') return `<span class="rd-seg walk"><span class="icon">${iconSvg('walk')}</span>${st.mins}분</span>`;
+          const style = st.color ? ` style="border-color:${esc(st.color)};color:${esc(st.color)}"` : '';
+          return `<span class="rd-seg line"${style}><span class="icon">${iconSvg(vehicleIcon(st.vehicle))}</span>${esc(st.name)}</span>`;
+        });
+        if(parts.length) chain=`<div class="rd-chain">${parts.join('<span class="rd-arrow">›</span>')}</div>`;
+
+        const first = r.steps.find(st=>st.kind==='transit');
+        if(first && first.depart){
+          bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>`);
+        }
+      }
+
+      detailEl.innerHTML = (bits.length||chain)
+        ? `<div class="rd-head">${bits.join('<span class="rd-dot">·</span>')}</div>${chain}` : '';
+    } else {
+      detailEl.innerHTML='';
+    }
+
+    if(!anyReal){
+      metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · 경로를 찾지 못해 추정치로 표시됩니다`;
+    } else {
+      const future = stopDateTime(dayIso, from.time).getTime() - Date.now() > 6*24*60*60*1000;
+      metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준`
+        + (normalizeMode(from.mode)==='transit'
+            ? (future ? ' · 여행일 시간표 기준 예상값이라 실제 운행과 다를 수 있어요'
+                      : ' · 출발 시각이 가까워지면 실시간 운행 정보가 반영돼요')
+            : '');
+    }
   }
 }
 
@@ -1247,6 +1358,8 @@ async function init(){
     if(local && local.days) TRIP = local;
   }
 
+  // 예전 버전 데이터 호환: 지하철/버스 → 대중교통
+  TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
   sortDays();
   activeDayId = TRIP.days.length? TRIP.days[0].id : null;
   setSyncLabel(HAS_SYNC? '동기화 중...' : '내 기기 저장');
