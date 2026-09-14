@@ -77,17 +77,20 @@
   .daychip.active{ background:var(--red); color:#fff; }
   .daychip.active .d{ opacity:.9; }
 
-  .ai-fab{ position:absolute; right:14px; bottom:190px; z-index:500;
+  .bottom-stack{ position:absolute; left:0; right:0; bottom:0; z-index:500;
+    display:flex; flex-direction:column; gap:9px; padding-bottom:12px; pointer-events:none; }
+  .bottom-stack > *{ pointer-events:auto; }
+  .bottom-row{ display:flex; align-items:center; gap:8px; padding:0 12px; justify-content:space-between; }
+  .ai-fab{ flex:0 0 auto; white-space:nowrap;
     background:var(--ink); color:#fff; border:none; border-radius:999px;
-    padding:11px 16px; font-size:12.5px; font-weight:600;
+    padding:10px 15px; font-size:12.5px; font-weight:600;
     display:flex; align-items:center; gap:7px; box-shadow:var(--shadow-float); }
   .ai-fab .icon{ color:#FFD24C; width:14px; height:14px; }
   .ai-fab.off{ background:#fff; color:var(--muted-2); }
   .ai-fab.off .icon{ color:var(--muted-2); }
 
-  .carousel-wrap{ position:absolute; left:0; right:0; bottom:0; z-index:500; padding-bottom:14px; }
   .carousel{ display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory;
-    padding:14px 0 4px; -ms-overflow-style:none; scrollbar-width:none; }
+    padding:6px 0 4px; -ms-overflow-style:none; scrollbar-width:none; }
   .carousel::-webkit-scrollbar{ display:none; }
   .carousel::before, .carousel::after{ content:''; flex:0 0 var(--edge); }
   .place-card{ scroll-snap-align:center; scroll-snap-stop:always; flex:0 0 var(--cardw);
@@ -198,15 +201,17 @@
   .rs.walk .rs-body{ color:var(--muted-2); }
 
   /* 지도 범례 */
-  .map-legend{ position:absolute; left:12px; bottom:158px; z-index:500;
+  .map-legend{ flex:0 1 auto; min-width:0; overflow-x:auto; scrollbar-width:none;
     background:#fff; border-radius:999px; padding:7px 12px; display:flex; gap:11px;
     box-shadow:var(--shadow-card); font-size:10.5px; font-weight:600; color:var(--muted); }
-  .map-legend span{ display:flex; align-items:center; gap:5px; }
+  .map-legend::-webkit-scrollbar{ display:none; }
+  .map-legend span{ display:flex; align-items:center; gap:5px; flex:0 0 auto; }
   .lg-line{ width:14px; height:3px; border-radius:2px; display:block; }
   .lg-line.walk{ background:repeating-linear-gradient(90deg,#8E8E96 0 3px,transparent 3px 6px); }
   .lg-line.transit{ background:#E03B4B; }
   .lg-line.drive{ background:#2F6BD8; }
   .lg-line.ai{ background:repeating-linear-gradient(90deg,#7C4DFF 0 5px,transparent 5px 8px); }
+  .lg-line.osm{ background:linear-gradient(90deg,#00A650 0 33%,#F39800 33% 66%,#0079C2 66% 100%); }
 
   /* 카드 하단 '다음 이동' */
   .pc-next{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:9px;
@@ -394,16 +399,17 @@
       <div class="daybar" id="daybar-map"></div>
     </div>
 
-    <button class="ai-fab" id="aiFab"><span class="icon" id="aiFabIcon"></span> AI 추천</button>
-
-    <div class="map-legend" id="mapLegend">
-      <span><i class="lg-line walk"></i>도보</span>
-      <span><i class="lg-line transit"></i>대중교통</span>
-      <span><i class="lg-line drive"></i>차량</span>
-      <span><i class="lg-line ai"></i>AI 추정</span>
-    </div>
-
-    <div class="carousel-wrap">
+    <div class="bottom-stack">
+      <div class="bottom-row">
+        <div class="map-legend" id="mapLegend">
+          <span><i class="lg-line walk"></i>도보</span>
+          <span><i class="lg-line transit"></i>대중교통</span>
+          <span><i class="lg-line drive"></i>차량</span>
+          <span><i class="lg-line ai"></i>AI 추정</span>
+          <span><i class="lg-line osm"></i>실제 노선</span>
+        </div>
+        <button class="ai-fab" id="aiFab"><span class="icon" id="aiFabIcon"></span> AI 추천</button>
+      </div>
       <div class="carousel" id="carousel"></div>
     </div>
   </div>
@@ -782,28 +788,180 @@ function drawStationDot(lat,lng,color,title){
   }
 }
 
-/* AI가 추정한 대중교통 경로를 지도에 그립니다 (좌표가 확인된 구간만) */
+/* =========================================================
+   OpenStreetMap(Overpass)에서 실제 노선 선형을 가져옵니다
+   — 지하철·노면전차는 선로 모양이 잘 정리돼 있어요
+   ========================================================= */
 const AI_COLOR = '#7C4DFF';
-function drawAiRoute(from, to){
+const OSM_LS_KEY = 'osm-lines:sapporo:v1';
+const OSM_TTL = 30*24*60*60*1000;          // 30일 캐시
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+
+/* 삿포로 주요 노선 별칭 — AI가 한국어로 답해도 매칭되도록 */
+const LINE_ALIAS = [
+  { keys:['난보쿠','남북','namboku','nanboku','南北'],   ja:'南北線',   color:'#00A650' },
+  { keys:['도자이','동서','tozai','東西'],               ja:'東西線',   color:'#F39800' },
+  { keys:['도호','동풍','toho','東豊'],                  ja:'東豊線',   color:'#0079C2' },
+  { keys:['시덴','노면전차','전차','市電','streetcar','tram'], ja:'市電', color:'#E5006E' },
+  { keys:['하코다테','函館'],                            ja:'函館本線', color:'#6C7A89' },
+  { keys:['치토세','千歳','공항선','쾌속에어포트'],       ja:'千歳線',   color:'#1C6BBA' }
+];
+
+let osmLines = null, osmLoading = null;
+
+function normText(x){ return String(x||'').toLowerCase().replace(/[\s·・\-]/g,''); }
+
+function readOsmCache(){
+  try{
+    const raw = localStorage.getItem(OSM_LS_KEY);
+    if(!raw) return null;
+    const o = JSON.parse(raw);
+    if(!o.at || Date.now()-o.at > OSM_TTL) return null;
+    return o.lines;
+  }catch(e){ return null; }
+}
+function writeOsmCache(lines){
+  try{ localStorage.setItem(OSM_LS_KEY, JSON.stringify({ at:Date.now(), lines })); }catch(e){}
+}
+
+/* 관계(relation)의 여러 way를 이어붙여 하나의 선으로 */
+function stitchWays(members){
+  const ways = members.filter(m=>m.type==='way' && Array.isArray(m.geometry) && m.geometry.length>1)
+                      .map(m=> m.geometry.map(g=>[g.lat, g.lon]));
+  if(!ways.length) return [];
+  const near=(a,b)=> Math.abs(a[0]-b[0])<0.0009 && Math.abs(a[1]-b[1])<0.0009;
+  let path = ways.shift().slice();
+  let guard = 0;
+  while(ways.length && guard++ < 500){
+    const end = path[path.length-1];
+    let idx=-1, rev=false;
+    for(let i=0;i<ways.length;i++){
+      if(near(ways[i][0], end)){ idx=i; rev=false; break; }
+      if(near(ways[i][ways[i].length-1], end)){ idx=i; rev=true; break; }
+    }
+    if(idx<0){ // 이어지지 않으면 그냥 다음 조각을 붙임
+      path = path.concat(ways.shift());
+      continue;
+    }
+    const seg = rev ? ways[idx].slice().reverse() : ways[idx];
+    path = path.concat(seg.slice(1));
+    ways.splice(idx,1);
+  }
+  return path;
+}
+
+async function loadOsmLines(){
+  if(osmLines) return osmLines;
+  const cached = readOsmCache();
+  if(cached){ osmLines = cached; return osmLines; }
+  if(osmLoading) return osmLoading;
+
+  const q = `[out:json][timeout:60];
+relation["type"="route"]["route"~"^(subway|light_rail|tram|train)$"](42.90,141.15,43.25,141.60);
+out geom tags;`;
+
+  osmLoading = (async ()=>{
+    try{
+      const res = await fetch(OVERPASS, { method:'POST', body:'data='+encodeURIComponent(q),
+        headers:{'Content-Type':'application/x-www-form-urlencoded'} });
+      if(!res.ok) throw new Error('overpass '+res.status);
+      const data = await res.json();
+      const lines = (data.elements||[]).map(el=>{
+        const t = el.tags||{};
+        return {
+          name: t.name || t['name:ja'] || t.ref || '',
+          nameEn: t['name:en'] || '',
+          ref: t.ref || '',
+          colour: t.colour || t.color || null,
+          path: stitchWays(el.members||[])
+        };
+      }).filter(l=> l.path.length>3);
+      osmLines = lines;
+      writeOsmCache(lines);
+      return lines;
+    }catch(e){
+      console.warn('[Overpass] 노선 데이터를 불러오지 못했어요', e);
+      osmLines = [];
+      return osmLines;
+    }finally{ osmLoading = null; }
+  })();
+  return osmLoading;
+}
+
+/* AI가 준 노선 이름 → OSM 노선 찾기 */
+function matchOsmLine(lineName){
+  if(!osmLines || !osmLines.length) return null;
+  const n = normText(lineName);
+  if(!n) return null;
+
+  const alias = LINE_ALIAS.find(a=> a.keys.some(k=> n.includes(normText(k))));
+  const wanted = alias ? normText(alias.ja) : n;
+
+  let best=null;
+  for(const l of osmLines){
+    const hay = normText(l.name + l.nameEn + l.ref);
+    if(hay.includes(wanted) || (alias && hay.includes(normText(alias.ja.replace('線',''))))){
+      if(!best || l.path.length > best.path.length) best = l;
+    }
+  }
+  if(best) return { path: best.path, color: best.colour || (alias? alias.color : null) || AI_COLOR };
+  return alias ? { path:null, color: alias.color } : null;
+}
+
+/* 선 위에서 두 지점 사이 구간만 잘라냅니다 */
+function nearestIndex(path, pt){
+  let bi=0, bd=Infinity;
+  for(let i=0;i<path.length;i++){
+    const dy=path[i][0]-pt[0], dx=(path[i][1]-pt[1])*0.73;
+    const d=dy*dy+dx*dx;
+    if(d<bd){ bd=d; bi=i; }
+  }
+  return { idx:bi, dist:Math.sqrt(bd)*111 };   // 대략 km
+}
+function sliceLine(path, a, b){
+  const A=nearestIndex(path,a), B=nearestIndex(path,b);
+  if(A.dist>1.2 || B.dist>1.2) return null;    // 역이 노선에서 너무 멀면 포기
+  const [s,e] = A.idx<=B.idx ? [A.idx,B.idx] : [B.idx,A.idx];
+  const seg = path.slice(s, e+1);
+  if(seg.length<2) return null;
+  return A.idx<=B.idx ? seg : seg.slice().reverse();
+}
+
+/* AI가 추정한 대중교통 경로를 지도에 그립니다 */
+async function drawAiRoute(from, to){
   const route = from.aiRoute;
   if(!route || !Array.isArray(route.steps) || !route.steps.length){
     drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
     return;
   }
+
+  const hasTransit = route.steps.some(st=> !String(st.mode||'').includes('도보'));
+  if(hasTransit) await loadOsmLines();
+
   let drew=false;
   route.steps.forEach(st=>{
     const a=st.fromAt, b=st.toAt;
     if(!a || !b) return;
     drew=true;
-    const isWalk = String(st.mode||'').includes('도보');
-    if(isWalk){
+
+    if(String(st.mode||'').includes('도보')){
       drawPath([a,b], ROUTE_STYLE.walk);
-    } else {
-      drawPath([a,b], { color:AI_COLOR, weight:5, dash:'10 6' });
-      drawStationDot(a[0],a[1], AI_COLOR, `${st.from||''} · ${st.line||st.mode||''} 승차 (AI 추정)`);
-      drawStationDot(b[0],b[1], AI_COLOR, `${st.to||''} · ${st.line||st.mode||''} 하차 (AI 추정)`);
+      return;
     }
+
+    const m = matchOsmLine(st.line || st.mode);
+    const color = (m && m.color) || AI_COLOR;
+    const seg = (m && m.path) ? sliceLine(m.path, a, b) : null;
+
+    if(seg){
+      drawPath(seg, { color, weight:6, dash:null });          // 실제 선로 모양
+    } else {
+      drawPath([a,b], { color, weight:5, dash:'10 6' });      // 노선 데이터가 없으면 직선
+    }
+    drawStationDot(a[0],a[1], color, `${st.from||''} · ${st.line||st.mode||''} 승차`);
+    drawStationDot(b[0],b[1], color, `${st.to||''} · ${st.line||st.mode||''} 하차`);
   });
+
   if(!drew) drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
 }
 
@@ -820,13 +978,13 @@ async function drawRoutesForDay(){
     const r = await requestRoute(from,to,modeToG(mode));
     if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
     if(!r || !r.ok){
-      if(mode==='transit') drawAiRoute(from, to);
+      if(mode==='transit') await drawAiRoute(from, to);
       else drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:'#1A1A1E', weight:2, dash:'2 7' });
       continue;
     }
 
     if(mode==='transit' && (!r.steps || !r.steps.length)){
-      drawAiRoute(from, to);
+      await drawAiRoute(from, to);
     } else if(mode==='transit' && r.steps.length){
       r.steps.forEach(st=>{
         if(st.kind==='transit'){
@@ -1274,7 +1432,8 @@ function renderAiRoute(d){
       ${d.summary? `<div class="ai-route-sum">${esc(d.summary)}</div>`:''}
       ${head.length? `<div class="rd-head">${head.join('<span class="rd-sep">·</span>')}</div>`:''}
       ${lis? `<ol class="rd-steps">${lis}</ol>`:''}
-      <div class="ai-route-warn">AI가 추정한 경로예요. 실제 노선·시간표·요금과 다를 수 있으니
+      <div class="ai-route-warn">AI가 추정한 경로예요. 지하철·전차 구간은 OpenStreetMap의 실제 선로를 따라
+        지도에 그려지지만, <b>시간표와 요금은 AI 추정</b>이라 실제와 다를 수 있어요.
         출발 전에 구글 지도에서 한 번 확인해주세요.${d.caution? ` ${esc(d.caution)}`:''}</div>
     </div>`;
 }
