@@ -124,6 +124,19 @@
     border-radius:999px; padding:7px 12px; font-size:11.5px; font-weight:700; cursor:pointer;
     display:flex; align-items:center; gap:5px; }
   .mini-btn .icon{ width:13px;height:13px; }
+  .stay-row{ display:flex; align-items:center; gap:8px; width:100%; margin:0 0 12px;
+    background:var(--tint); border:1px solid var(--line-2); border-radius:var(--r-md);
+    padding:11px 13px; cursor:pointer; text-align:left; }
+  .stay-row .icon{ width:15px; height:15px; color:var(--muted-2); flex:0 0 15px; }
+  .stay-row.set .icon{ color:var(--red); }
+  .stay-txt{ flex:1; min-width:0; font-size:13px; font-weight:700; color:var(--muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stay-row.set .stay-txt{ color:var(--ink); }
+  .stay-edit{ flex:0 0 auto; font-size:11px; font-weight:700; color:var(--muted); }
+  .stay-txt b{ font-weight:700; color:var(--red); margin-right:4px; }
+  .stay-inherit{ font-size:10px; font-weight:600; color:var(--muted-2);
+    border:1px solid var(--line-2); border-radius:999px; padding:1px 6px; margin-left:4px; }
+  .stay-tag{ background:var(--red-soft) !important; color:var(--red) !important; }
   .sched-days{ display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
   .sched-days::-webkit-scrollbar{ display:none; }
   .sched-days .daychip{ box-shadow:none; background:var(--tint); }
@@ -422,6 +435,11 @@
         <button class="mini-btn" id="editDayBtn"><span class="icon" data-i="pencil"></span>날짜 편집</button>
         <button class="mini-btn" id="addDayBtn"><span class="icon" data-i="plus"></span>날짜</button>
       </div>
+      <button class="stay-row" id="stayBtn">
+        <span class="icon" data-i="bed"></span>
+        <span class="stay-txt" id="stayLabel">숙소 설정하기</span>
+        <span class="stay-edit">변경</span>
+      </button>
       <div class="sched-days" id="daybar-sched"></div>
     </div>
     <div class="list-body">
@@ -554,6 +572,8 @@ function defaultTrip(){
   let u = 1;
   return {
     title: "삿포로 여행",
+    stay: { name:"DAITO residence 중앙구역소앞", place:"삿포로 주오구 미나미3조니시",
+            lat:43.054739, lng:141.3399746 },
     nextUid: 100,
     nextDayId: 10,
     updatedAt: 0,
@@ -1217,6 +1237,19 @@ function renderScheduleScreen(){
   document.getElementById('schedTitle').textContent = day? `${fmtDate(day.iso)} (${fmtDow(day.iso)}) · ${day.label}` : '일정표';
   renderDayChips('daybar-sched', ()=>{ closeForm(); closeDayForm(); renderScheduleScreen(); });
 
+  const stayLb=document.getElementById('stayLabel');
+  const stayBtn=document.getElementById('stayBtn');
+  const dIdx = TRIP.days.findIndex(x=>x.id===activeDayId);
+  const dStay = dIdx>=0 ? stayForDayIndex(dIdx) : null;
+  if(dStay){
+    stayLb.innerHTML = `<b>오늘 밤</b> ${esc(dStay.name)}`
+      + (stayIsOwn(dIdx)? '' : ' <span class="stay-inherit">이어받음</span>');
+    stayBtn.classList.add('set');
+  } else {
+    stayLb.textContent = '숙소 설정하기';
+    stayBtn.classList.remove('set');
+  }
+
   const wrap=document.getElementById('stopListEdit'); wrap.innerHTML='';
   if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; return; }
   if(!day.stops.length){ wrap.innerHTML=`<div class="empty-note">이 날은 아직 일정이 비어있어요.</div>`; return; }
@@ -1234,6 +1267,7 @@ function renderScheduleScreen(){
         ${s.place? `<div class="loc"><span class="icon">${iconSvg('navMap')}</span><span>${esc(s.place)}</span></div>`:''}
         <div class="row2">
           <span class="tag">${s.cat}${s.tbd?' · 위치 미정':''}</span>
+          ${s.stay? '<span class="tag stay-tag">숙소 출발</span>':''}
           <button class="edit-btn">수정</button>
         </div>
       </div>`;
@@ -1671,6 +1705,170 @@ setInterval(()=>{
   if(onMap) renderMapForDay();
 }, 60000);
 
+/* =========================================================
+   숙소 — 첫날을 제외한 모든 날의 시작을 숙소로
+   ========================================================= */
+function minusMinutes(hhmm, min){
+  const m=/^(\d{1,2}):(\d{2})$/.exec(hhmm||'');
+  if(!m) return '08:00';
+  let t = (+m[1])*60 + (+m[2]) - min;
+  if(t < 0) t = 0;
+  return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
+
+/* idx번째 날 밤에 묵는 숙소
+   — 그 날에 지정된 값이 없으면 이전 날 설정을 이어받습니다 */
+function stayForDayIndex(idx){
+  for(let i=idx; i>=0; i--){
+    const d=TRIP.days[i];
+    if(d && d.stay && d.stay.lat!=null) return d.stay;
+  }
+  return (TRIP.stay && TRIP.stay.lat!=null) ? TRIP.stay : null;
+}
+/* 그 날의 숙소가 직접 지정된 것인지(=이어받은 게 아닌지) */
+function stayIsOwn(idx){
+  const d=TRIP.days[idx];
+  return !!(d && d.stay && d.stay.lat!=null);
+}
+
+/* 각 날의 첫 일정을 '전날 묵은 숙소'에서 출발하도록 맞춥니다 */
+function ensureStayStarts(){
+  let changed=false;
+
+  TRIP.days.forEach((d, idx)=>{
+    if(idx===0){                       // 첫날은 도착일이라 제외
+      const had = d.stops.length;
+      d.stops = d.stops.filter(x=>!x.stay);
+      if(d.stops.length!==had) changed=true;
+      return;
+    }
+
+    const stay = stayForDayIndex(idx-1);   // 전날 밤 묵은 곳
+    const existing = d.stops.find(x=>x.stay);
+
+    if(!stay){
+      if(existing){ d.stops = d.stops.filter(x=>!x.stay); changed=true; }
+      return;
+    }
+
+    if(existing){
+      if(existing.name!==stay.name || existing.lat!==stay.lat || existing.lng!==stay.lng){
+        existing.name=stay.name; existing.place=stay.place||'';
+        existing.lat=stay.lat; existing.lng=stay.lng; existing.tbd=false;
+        changed=true;
+      }
+      return;
+    }
+
+    if(d.noStay) return;                   // 사용자가 지운 날은 다시 넣지 않음
+
+    const first = d.stops[0];
+    const t = first ? minusMinutes(first.time, 30) : '08:00';
+    d.stops.unshift({
+      id:newUid(), time:t, name:stay.name, note:'숙소에서 출발',
+      cat:'숙소', place:stay.place||'', lat:stay.lat, lng:stay.lng,
+      mode:'walk', stay:true
+    });
+    d.stops.sort((a,b)=>a.time.localeCompare(b.time));
+    changed=true;
+  });
+
+  if(changed) markChanged();
+  return changed;
+}
+
+function openStayForm(){
+  closeForm(); dayFormOpen=true;
+  const idx = TRIP.days.findIndex(d=>d.id===activeDayId);
+  const day = TRIP.days[idx];
+  if(!day){ toast('먼저 날짜를 추가해주세요'); dayFormOpen=false; return; }
+  const st = stayForDayIndex(idx) || {};
+  const own = stayIsOwn(idx);
+  const nextDay = TRIP.days[idx+1];
+
+  document.getElementById('formArea').innerHTML=`
+    <div class="form-card">
+      <h3>${fmtDate(day.iso)} (${fmtDow(day.iso)}) 밤에 묵는 숙소</h3>
+      <p class="hint" style="margin:0 0 14px;">
+        ${nextDay
+          ? `여기에 지정한 숙소가 <b>${fmtDate(nextDay.iso)} 일정의 첫 출발지</b>가 됩니다.`
+          : '마지막 날이라 다음 날 출발지로는 쓰이지 않아요.'}
+        ${own? '' : '<br>지금은 이전 날 설정을 이어받고 있어요. 여기서 바꾸면 이후 날짜에도 이어집니다.'}
+      </p>
+      <label class="first">숙소 이름</label>
+      <input type="text" id="f_name" value="${st.name? esc(st.name):''}" placeholder="예: DAITO residence 중앙구역소앞">
+      <label>위치 검색</label>
+      <div class="geo-row">
+        <input type="text" id="f_geoQuery" placeholder="숙소 이름이나 주소" value="${st.name? esc(st.name):''}">
+        <button class="geo-btn" id="f_geoSearch"><span class="icon">${iconSvg('search')}</span>검색</button>
+      </div>
+      <div class="geo-results" id="f_geoResults"></div>
+      <p class="hint" id="f_geoStatus">${st.lat!=null? `현재 위치: ${esc(shortPlace(st.place||st.name))}` : '두 글자 이상 입력하면 후보가 바로 떠요.'}</p>
+      <button type="button" class="link-btn" id="f_pickMap">지도에서 직접 찍기</button>
+      <div id="f_miniMap" class="mini-map" style="display:none;"></div>
+      <div class="form-actions">
+        <button class="btn-primary" id="s_save">이 날부터 적용</button>
+        <button class="btn-ghost" id="s_cancel">취소</button>
+        ${own? '<button class="btn-ghost btn-danger" id="s_clear">이전 날과 동일하게</button>'
+             : (st.lat!=null? '<button class="btn-ghost btn-danger" id="s_clear">숙소 해제</button>':'')}
+      </div>
+    </div>`;
+
+  if(st.lat!=null) geoPicked={ lat:st.lat, lng:st.lng, label:st.place||st.name };
+  miniMap=null; miniMarker=null; acToken=null; clearTimeout(searchTimer);
+  document.getElementById('f_geoSearch').addEventListener('click', ()=> doGeoSearch(false));
+  document.getElementById('f_geoQuery').addEventListener('input', onGeoInput);
+  document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
+  document.getElementById('s_save').addEventListener('click', saveStay);
+  document.getElementById('s_cancel').addEventListener('click', ()=> closeDayForm());
+  const cl=document.getElementById('s_clear');
+  if(cl) cl.addEventListener('click', clearStay);
+  document.getElementById('formArea').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function saveStay(){
+  const name=document.getElementById('f_name').value.trim();
+  if(!name){ alert('숙소 이름을 입력해주세요.'); return; }
+  if(!geoPicked){ alert('위치를 검색해서 선택하거나 지도에서 찍어주세요.'); return; }
+  const idx = TRIP.days.findIndex(d=>d.id===activeDayId);
+  const day = TRIP.days[idx];
+  if(!day) return;
+
+  const stay = { name, place: shortPlace(geoPicked.label), lat:geoPicked.lat, lng:geoPicked.lng };
+  day.stay = stay;
+  if(idx===0 || !TRIP.stay) TRIP.stay = stay;     // 기본값도 함께 맞춰둡니다
+
+  // 이 날 이후로는 다시 자동 채움
+  TRIP.days.forEach((d,i)=>{ if(i>idx) delete d.noStay; });
+  ensureStayStarts(); markChanged();
+  closeDayForm(); activeStopId=null;
+  refreshAll(); renderScheduleScreen();
+  const next = TRIP.days[idx+1];
+  toast(next? `${fmtDate(next.iso)} 출발지에 반영했어요` : '숙소를 저장했어요');
+}
+
+function clearStay(){
+  const idx = TRIP.days.findIndex(d=>d.id===activeDayId);
+  const day = TRIP.days[idx];
+  if(!day) return;
+
+  if(stayIsOwn(idx)){
+    delete day.stay;                              // 이전 날 설정을 다시 이어받음
+    ensureStayStarts(); markChanged();
+    closeDayForm(); activeStopId=null;
+    refreshAll(); renderScheduleScreen();
+    toast('이전 날 숙소를 이어받아요');
+    return;
+  }
+
+  if(!confirm('숙소 지정을 모두 해제할까요? 자동으로 추가된 숙소 일정도 함께 사라져요.')) return;
+  TRIP.stay = null;
+  TRIP.days.forEach(d=>{ delete d.stay; d.stops = d.stops.filter(x=>!x.stay); delete d.noStay; });
+  markChanged(); closeDayForm(); activeStopId=null;
+  refreshAll(); renderScheduleScreen();
+  toast('숙소 지정을 해제했어요');
+}
+
 /* ================= DAY FORM ================= */
 function openDayForm(mode){
   closeForm(); dayFormOpen=true;
@@ -1712,9 +1910,9 @@ function saveDay(editing){
     const nd={ id:TRIP.nextDayId++, iso, label, stops:[] };
     TRIP.days.push(nd); activeDayId=nd.id;
   }
-  sortDays(); markChanged(); closeDayForm();
+  sortDays(); ensureStayStarts(); markChanged(); closeDayForm();
   activeStopId=null;
-  refreshAll();
+  refreshAll(); renderScheduleScreen();
   toast(editing? '날짜를 수정했어요':'날짜를 추가했어요');
 }
 function deleteDay(day){
@@ -2017,6 +2215,8 @@ function saveForm(){
 function deleteStop(id){
   if(!confirm('이 일정을 삭제할까요?')) return;
   const day=currentDay();
+  const target=day.stops.find(x=>x.id===id);
+  if(target && target.stay) day.noStay=true;   // 이 날은 숙소 출발을 자동으로 넣지 않음
   day.stops=day.stops.filter(x=>x.id!==id);
   markChanged();
   editingStopId=null;
@@ -2072,6 +2272,7 @@ document.querySelectorAll('.navbtn').forEach(b=> b.addEventListener('click', ()=
 document.getElementById('addStopBtn').addEventListener('click', ()=> openForm(null));
 document.getElementById('addDayBtn').addEventListener('click', ()=> openDayForm('add'));
 document.getElementById('editDayBtn').addEventListener('click', ()=> openDayForm('edit'));
+document.getElementById('stayBtn').addEventListener('click', openStayForm);
 document.getElementById('carousel').addEventListener('scroll', onCarouselScroll, {passive:true});
 window.addEventListener('resize', setCarouselMetrics);
 document.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> document.getElementById(b.dataset.close).classList.remove('open')));
@@ -2303,6 +2504,7 @@ async function init(){
   // 예전 버전 데이터 호환: 지하철/버스 → 대중교통
   TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
   sortDays();
+  ensureStayStarts();
   activeDayId = TRIP.days.length? TRIP.days[0].id : null;
   setSyncLabel(HAS_SYNC? '동기화 중...' : '내 기기 저장');
 
