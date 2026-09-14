@@ -176,6 +176,9 @@
   .rd-sep{ color:var(--muted-2); }
   .rd-none{ font-size:12px; color:var(--muted); background:var(--tint); border-radius:var(--r-sm);
     padding:10px 12px; line-height:1.55; }
+  .rd-none.err{ color:var(--red); background:var(--red-soft); }
+  .rd-none b{ font-weight:700; }
+  .err-hint{ color:var(--red) !important; }
   .rd-seg.line{ color:#fff; border-color:transparent; background:var(--red); }
 
   /* 단계별 안내 */
@@ -228,9 +231,15 @@
   .geo-results{ margin-top:8px; display:flex; flex-direction:column; gap:6px; }
   .geo-result{ text-align:left; border:1px solid var(--line-2); background:#fff; border-radius:var(--r-sm);
     padding:10px 11px; font-size:12px; cursor:pointer; line-height:1.45; }
+  .geo-result{ display:flex; align-items:flex-start; gap:9px; }
   .geo-result.picked{ border-color:var(--red); background:var(--red-soft); }
-  .geo-result b{ font-weight:700; }
-  .geo-sub{ color:var(--muted); font-size:11px; }
+  .gr-ic{ flex:0 0 16px; width:16px; height:16px; color:var(--muted-2); margin-top:1px; display:inline-flex; }
+  .gr-ic svg{ width:100%; height:100%; }
+  .geo-result.picked .gr-ic{ color:var(--red); }
+  .gr-txt{ min-width:0; }
+  .geo-result b{ font-weight:700; font-size:13px; display:block; }
+  .geo-sub{ color:var(--muted); font-size:11.5px; display:block; margin-top:2px; line-height:1.4; }
+  .geo-results{ max-height:300px; overflow-y:auto; }
   .mini-map{ height:230px; border-radius:var(--r-sm); overflow:hidden; margin-top:8px; border:1px solid var(--line-2); }
   .form-actions{ display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
   .btn-primary{ flex:1; min-width:120px; border:none; background:var(--ink); color:#fff; padding:13px;
@@ -953,6 +962,27 @@ function renderScheduleScreen(){
    경로 조회 (공통) — 지도와 일정표가 같은 결과를 씁니다
    ========================================================= */
 const routeCache = {};
+let lastDirStatus = null;
+
+const DIR_STATUS_MSG = {
+  ZERO_RESULTS:
+    '이 구간의 경로를 찾지 못했어요. 거리가 아주 가깝거나 해당 수단의 운행 정보가 없는 구간일 수 있어요.',
+  REQUEST_DENIED:
+    'Directions API 요청이 거부됐어요(REQUEST_DENIED). Google Cloud Console에서 <b>Directions API</b>가 사용 설정되어 있는지, API 키의 <b>API 제한사항</b>에 Directions API가 포함되어 있는지 확인해주세요.',
+  OVER_QUERY_LIMIT:
+    '요청 한도를 넘었어요(OVER_QUERY_LIMIT). 잠시 후 다시 시도하거나 Cloud Console에서 사용량을 확인해주세요.',
+  INVALID_REQUEST:
+    '요청 형식이 올바르지 않아요(INVALID_REQUEST). 출발지나 도착지 좌표를 확인해주세요.',
+  NOT_FOUND:
+    '출발지나 도착지를 지도에서 찾지 못했어요(NOT_FOUND). 위치를 다시 지정해보세요.',
+  UNKNOWN_ERROR:
+    '구글 서버에서 일시적인 오류가 발생했어요(UNKNOWN_ERROR). 잠시 후 다시 시도하면 대개 해결돼요.',
+  MAX_WAYPOINTS_EXCEEDED: '경유지가 너무 많아요.',
+  MAX_ROUTE_LENGTH_EXCEEDED: '경로가 너무 길어요.'
+};
+function dirStatusMsg(st){
+  return DIR_STATUS_MSG[st] || `경로를 불러오지 못했어요 (${esc(String(st||'알 수 없음'))}).`;
+}
 function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }  // 1분 단위 갱신
 
 function modeToG(mode){ const m=MODES.find(x=>x.key===normalizeMode(mode)); return m? m.g : 'WALKING'; }
@@ -970,7 +1000,12 @@ function requestRoute(from, to, g){
     };
     if(g==='TRANSIT') req.transitOptions = { departureTime: new Date() };
     dirService.route(req, (res, status)=>{
-      if(status!=='OK' || !res.routes[0] || !res.routes[0].legs[0]) return resolve({ ok:false, status });
+      if(status!=='OK' || !res.routes[0] || !res.routes[0].legs[0]){
+        delete routeCache[key];            // 실패는 캐시하지 않음 (재시도 가능)
+        if(status!=='ZERO_RESULTS') console.warn('[Directions]', g, status);
+        lastDirStatus = status;
+        return resolve({ ok:false, status });
+      }
       const route=res.routes[0], lg=route.legs[0];
       resolve({
         ok:true,
@@ -1088,11 +1123,11 @@ async function fillLegDetail(from,to,legEl,km){
   const r = routes[modeToG(cur)];
 
   if(!r || !r.ok){
-    detailEl.innerHTML = cur==='transit'
-      ? `<div class="rd-none">대중교통 경로를 찾지 못했어요. 거리가 아주 가깝거나 운행 정보가 없는 구간일 수 있어요.</div>`
-      : '';
+    const st = r? r.status : 'UNKNOWN_ERROR';
+    const denied = (st==='REQUEST_DENIED' || st==='OVER_QUERY_LIMIT');
+    detailEl.innerHTML = `<div class="rd-none ${denied?'err':''}">${dirStatusMsg(st)}</div>`;
     metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km`
-      + (anyReal? ' · 다른 수단은 구글 경로 기준' : ' · 경로를 찾지 못해 추정치로 표시됩니다');
+      + (anyReal? ' · 다른 수단은 구글 경로 기준' : ' · 추정치로 표시됩니다');
     return;
   }
 
@@ -1261,7 +1296,7 @@ function openForm(stopId){
         <button class="geo-btn" id="f_geoSearch"><span class="icon">${iconSvg('search')}</span>검색</button>
       </div>
       <div class="geo-results" id="f_geoResults"></div>
-      <p class="hint" id="f_geoStatus">${ed&&!ed.tbd? '기존 위치가 저장되어 있어요. 다시 검색하면 위치가 바뀌어요.':'검색하지 않으면 위치 미정으로 저장돼요. 가게 이름은 일본어나 영어가 더 잘 찾아져요.'}</p>
+      <p class="hint" id="f_geoStatus">${ed&&!ed.tbd? '기존 위치가 저장되어 있어요. 다시 검색하면 위치가 바뀌어요.':'두 글자 이상 입력하면 후보가 바로 떠요.'}</p>
       <button type="button" class="link-btn" id="f_pickMap">지도에서 직접 찍기</button>
       <div id="f_miniMap" class="mini-map" style="display:none;"></div>
       <div class="form-actions">
@@ -1271,10 +1306,11 @@ function openForm(stopId){
       </div>
     </div>`;
   if(ed && !ed.tbd) geoPicked={lat:ed.lat,lng:ed.lng,label:ed.place||ed.name};
-  miniMap=null; miniMarker=null;
-  document.getElementById('f_geoSearch').addEventListener('click', doGeoSearch);
+  miniMap=null; miniMarker=null; acToken=null; clearTimeout(searchTimer);
+  document.getElementById('f_geoSearch').addEventListener('click', ()=> doGeoSearch(false));
   document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
-  document.getElementById('f_geoQuery').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGeoSearch(); } });
+  document.getElementById('f_geoQuery').addEventListener('input', onGeoInput);
+  document.getElementById('f_geoQuery').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(searchTimer); doGeoSearch(false); } });
   document.getElementById('f_save').addEventListener('click', saveForm);
   document.getElementById('f_cancel').addEventListener('click', closeForm);
   if(ed) document.getElementById('f_delete').addEventListener('click', ()=> deleteStop(stopId));
@@ -1289,108 +1325,178 @@ function closeForm(){ editingStopId=null; geoPicked=null; miniMap=null; miniMark
    그래도 못 찾으면 지도에서 직접 찍기                              */
 
 const SAPPORO = { lat:43.0618, lng:141.3545 };
-let placesService = null;
+let placesService=null, acService=null, acToken=null, searchTimer=null, searchSeq=0;
 
-function ensurePlacesService(){
-  if(placesService) return placesService;
-  if(window.google && google.maps && google.maps.places){
-    placesService = new google.maps.places.PlacesService(gmap || document.createElement('div'));
+function ensurePlaces(){
+  if(!(window.google && google.maps && google.maps.places)) return false;
+  if(!placesService) placesService = new google.maps.places.PlacesService(gmap || document.createElement('div'));
+  if(!acService)     acService     = new google.maps.places.AutocompleteService();
+  return true;
+}
+function newToken(){
+  if(window.google && google.maps && google.maps.places && google.maps.places.AutocompleteSessionToken){
+    acToken = new google.maps.places.AutocompleteSessionToken();
   }
-  return placesService;
+  return acToken;
 }
 
+/* ---- 결과 목록 렌더 ---- */
 function renderGeoResults(items, st, rs){
   rs.innerHTML='';
   if(!items.length) return false;
-  st.textContent='아래에서 위치를 선택하세요.';
   items.forEach(it=>{
     const b=document.createElement('button');
     b.type='button'; b.className='geo-result';
-    b.innerHTML = `<b>${esc(it.title)}</b>${it.sub? `<br><span class="geo-sub">${esc(it.sub)}</span>`:''}`;
-    b.addEventListener('click', ()=>{
-      geoPicked={ lat:it.lat, lng:it.lng, label: it.sub? `${it.title}, ${it.sub}` : it.title };
-      document.querySelectorAll('.geo-result').forEach(x=>x.classList.remove('picked'));
-      b.classList.add('picked');
-      st.textContent='이 위치로 저장됩니다.';
-    });
+    b.innerHTML = `<span class="gr-ic">${iconSvg(it.icon||'navMap')}</span>
+      <span class="gr-txt"><b>${esc(it.title)}</b>${it.sub? `<span class="geo-sub">${esc(it.sub)}</span>`:''}</span>`;
+    b.addEventListener('click', ()=> pickResult(it, b, st));
     rs.appendChild(b);
   });
   return true;
 }
 
-function searchGoogle(q){
+async function pickResult(it, btn, st){
+  document.querySelectorAll('.geo-result').forEach(x=>x.classList.remove('picked'));
+  btn.classList.add('picked');
+
+  if(it.placeId && ensurePlaces()){
+    st.textContent='위치를 확인하는 중...';
+    const detail = await new Promise(resolve=>{
+      placesService.getDetails(
+        { placeId: it.placeId, fields:['name','formatted_address','geometry'], sessionToken: acToken },
+        (res, status)=> resolve(status===google.maps.places.PlacesServiceStatus.OK ? res : null)
+      );
+    });
+    newToken();
+    if(detail && detail.geometry){
+      geoPicked = {
+        lat: detail.geometry.location.lat(),
+        lng: detail.geometry.location.lng(),
+        label: detail.formatted_address ? `${detail.name}, ${detail.formatted_address}` : detail.name
+      };
+      fillNameIfEmpty(detail.name || it.title);
+      st.textContent = `이 위치로 저장됩니다: ${detail.name || it.title}`;
+      return;
+    }
+    st.textContent = '위치 정보를 가져오지 못했어요. 다른 결과를 선택하거나 지도에서 직접 찍어주세요.';
+    return;
+  }
+
+  geoPicked = { lat:it.lat, lng:it.lng, label: it.sub? `${it.title}, ${it.sub}` : it.title };
+  fillNameIfEmpty(it.title);
+  st.textContent = `이 위치로 저장됩니다: ${it.title}`;
+}
+
+function fillNameIfEmpty(name){
+  const el=document.getElementById('f_name');
+  if(el && !el.value.trim() && name) el.value = name;
+}
+
+/* ---- 구글 자동완성 (실시간 제안) ---- */
+function googleSuggest(q){
   return new Promise(resolve=>{
-    const svc = ensurePlacesService();
-    if(!svc) return resolve([]);
-    svc.textSearch({
-      query: q,
-      location: new google.maps.LatLng(SAPPORO.lat, SAPPORO.lng),
-      radius: 120000
-    }, (results, status)=>{
-      if(status !== google.maps.places.PlacesServiceStatus.OK || !results) return resolve([]);
-      resolve(results.slice(0,6).map(r=>({
-        title: r.name,
-        sub: r.formatted_address || '',
-        lat: r.geometry.location.lat(),
-        lng: r.geometry.location.lng()
-      })));
+    if(!ensurePlaces()) return resolve({items:[], status:'NO_PLACES'});
+    if(!acToken) newToken();
+    acService.getPlacePredictions({
+      input: q,
+      sessionToken: acToken,
+      language: 'ko',
+      locationBias: new google.maps.Circle({ center:{lat:SAPPORO.lat, lng:SAPPORO.lng}, radius:150000 })
+    }, (preds, status)=>{
+      if(status!==google.maps.places.PlacesServiceStatus.OK || !preds){
+        return resolve({ items:[], status });
+      }
+      resolve({
+        items: preds.slice(0,7).map(p=>{
+          const f=p.structured_formatting||{};
+          const types=p.types||[];
+          let icon='navMap';
+          if(types.includes('restaurant')||types.includes('food')||types.includes('cafe')) icon='food';
+          else if(types.includes('lodging')) icon='bed';
+          else if(types.includes('transit_station')||types.includes('subway_station')) icon='metro';
+          else if(types.includes('bus_station')) icon='bus';
+          else if(types.includes('airport')) icon='plane';
+          return { title: f.main_text || p.description, sub: f.secondary_text || '', placeId: p.place_id, icon };
+        }),
+        status:'OK'
+      });
     });
   });
 }
 
 async function searchNominatim(q){
-  // 홋카이도 주변으로 우선순위를 주되, 벗어난 결과도 허용
-  const view = '139.0,46.0,146.5,41.0';
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6`
-    + `&accept-language=ko,ja,en&viewbox=${view}&q=${encodeURIComponent(q)}`;
-  const res = await fetch(url);
+  const view='139.0,46.0,146.5,41.0';
+  const res=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=7&accept-language=ko,ja,en&viewbox=${view}&q=${encodeURIComponent(q)}`);
   if(!res.ok) return [];
-  const data = await res.json();
+  const data=await res.json();
   return data.map(r=>{
-    const parts = r.display_name.split(',').map(x=>x.trim());
-    return { title: parts[0], sub: parts.slice(1,4).join(', '), lat:parseFloat(r.lat), lng:parseFloat(r.lon) };
+    const parts=r.display_name.split(',').map(x=>x.trim());
+    return { title:parts[0], sub:parts.slice(1,4).join(', '), lat:parseFloat(r.lat), lng:parseFloat(r.lon) };
   });
 }
-
 async function searchPhoton(q){
-  const url = `https://photon.komoot.io/api/?limit=6&lang=default`
-    + `&lat=${SAPPORO.lat}&lon=${SAPPORO.lng}&q=${encodeURIComponent(q)}`;
-  const res = await fetch(url);
+  const res=await fetch(`https://photon.komoot.io/api/?limit=7&lang=default&lat=${SAPPORO.lat}&lon=${SAPPORO.lng}&q=${encodeURIComponent(q)}`);
   if(!res.ok) return [];
-  const data = await res.json();
+  const data=await res.json();
   return (data.features||[]).map(f=>{
     const p=f.properties||{};
-    const sub=[p.street, p.district, p.city, p.state, p.country].filter(Boolean).join(', ');
-    return { title: p.name || p.street || '이름 없는 장소', sub, lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0] };
+    return { title:p.name||p.street||'', sub:[p.street,p.district,p.city,p.state,p.country].filter(Boolean).join(', '),
+             lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0] };
   }).filter(x=>x.title);
 }
 
-async function doGeoSearch(){
+/* ---- 입력할 때마다 자동 검색 ---- */
+function onGeoInput(){
+  const q=document.getElementById('f_geoQuery').value.trim();
+  const st=document.getElementById('f_geoStatus'), rs=document.getElementById('f_geoResults');
+  clearTimeout(searchTimer);
+  if(q.length<2){ rs.innerHTML=''; return; }
+  const delay = ensurePlaces() ? 250 : 650;   // 무료 엔진은 호출 간격을 넉넉히
+  st.textContent='검색 중...';
+  searchTimer=setTimeout(()=> doGeoSearch(true), delay);
+}
+
+async function doGeoSearch(isLive){
   const q=document.getElementById('f_geoQuery').value.trim();
   const st=document.getElementById('f_geoStatus'), rs=document.getElementById('f_geoResults');
   if(!q){ st.textContent='검색어를 입력해주세요.'; return; }
-  st.textContent='검색 중입니다.'; rs.innerHTML='';
+  const seq = ++searchSeq;
+  if(!isLive){ st.textContent='검색 중...'; rs.innerHTML=''; }
 
-  const tried=[];
   try{
-    if(ensurePlacesService()){
-      tried.push('구글');
-      const g = await searchGoogle(q);
-      if(renderGeoResults(g, st, rs)) return;
+    if(ensurePlaces()){
+      const g = await googleSuggest(q);
+      if(seq!==searchSeq) return;
+      if(g.status==='OK' && g.items.length){
+        renderGeoResults(g.items, st, rs);
+        st.textContent='원하는 곳을 선택하세요.';
+        return;
+      }
+      if(g.status==='REQUEST_DENIED'){
+        rs.innerHTML='';
+        st.innerHTML='장소 검색이 거부됐어요(REQUEST_DENIED). Google Cloud Console에서 <b>Places API</b>가 사용 설정되어 있는지, 키의 API 제한사항에 포함되어 있는지 확인해주세요.';
+        return;
+      }
+      if(g.status==='ZERO_RESULTS'){
+        rs.innerHTML='';
+        st.innerHTML='검색 결과가 없어요. 철자를 바꾸거나 <b>지도에서 직접 찍기</b>를 이용해보세요.';
+        return;
+      }
     }
 
-    tried.push('OpenStreetMap');
     let list = await searchNominatim(q);
-    if(renderGeoResults(list, st, rs)) return;
+    if(seq!==searchSeq) return;
+    if(renderGeoResults(list, st, rs)){ st.textContent='원하는 곳을 선택하세요.'; return; }
 
-    tried.push('Photon');
     list = await searchPhoton(q);
-    if(renderGeoResults(list, st, rs)) return;
+    if(seq!==searchSeq) return;
+    if(renderGeoResults(list, st, rs)){ st.textContent='원하는 곳을 선택하세요.'; return; }
 
-    st.innerHTML = `검색 결과가 없어요. 가게 이름은 <b>일본어나 영어</b>로 넣으면 더 잘 찾아요`
-      + ` (예: 라마이 → <b>RAMAI 札幌</b>). 아래 <b>지도에서 직접 찍기</b>로 위치를 정할 수도 있어요.`;
+    rs.innerHTML='';
+    st.innerHTML='검색 결과가 없어요. 가게 이름은 <b>일본어나 영어</b>로 넣으면 더 잘 찾아요 (예: 라마이 → <b>RAMAI 札幌</b>). <b>지도에서 직접 찍기</b>로 정할 수도 있어요.';
   }catch(e){
-    st.innerHTML = `검색 중 오류가 발생했어요 (${esc(tried.join(', '))}). 잠시 후 다시 시도하거나 <b>지도에서 직접 찍기</b>를 이용해주세요.`;
+    if(seq!==searchSeq) return;
+    st.innerHTML='검색 중 오류가 발생했어요. 잠시 후 다시 시도하거나 <b>지도에서 직접 찍기</b>를 이용해주세요.';
   }
 }
 
@@ -1528,7 +1634,10 @@ document.getElementById('statusBtn').addEventListener('click', ()=>{
   ];
   document.getElementById('statusList').innerHTML = rows.map(([k,label,on])=>
     `<div class="status-row"><span class="k">${k}</span><span class="v ${on?'on':'off'}">${label}</span></div>`
-  ).join('') + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`;
+  ).join('')
+    + (lastDirStatus && lastDirStatus!=='OK' && lastDirStatus!=='ZERO_RESULTS'
+        ? `<p class="hint err-hint">최근 경로 조회 응답: <code>${esc(lastDirStatus)}</code><br>${dirStatusMsg(lastDirStatus)}</p>` : '')
+    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`;
   document.getElementById('statusModalBg').classList.add('open');
 });
 
