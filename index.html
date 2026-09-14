@@ -165,6 +165,7 @@
   .transit-ai-btn{ margin-top:9px; border:1px solid var(--line-2); background:#fff; color:var(--ink);
     border-radius:999px; padding:6px 10px; font-size:11px; font-weight:700; cursor:pointer; }
   .transit-ai-btn:disabled{ color:var(--muted-2); background:var(--tint); cursor:not-allowed; }
+  .transit-ai-btn.loading{ opacity:.7; }
   .transit-ai-status{ margin-top:7px; font-size:11.5px; color:var(--muted); line-height:1.5; }
   .rd-head{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:12px; }
   .rd-time{ font-family:var(--font-mono); font-weight:600; color:var(--ink); }
@@ -713,25 +714,46 @@ const ROUTE_STYLE = {
   transit:{ color:'#35A853', weight:6, dash:null }
 };
 
+function mixHex(a,b,t){
+  const pa=a.replace('#',''), pb=b.replace('#','');
+  const ai=parseInt(pa,16), bi=parseInt(pb,16);
+  const ar=(ai>>16)&255, ag=(ai>>8)&255, ab=ai&255;
+  const br=(bi>>16)&255, bg=(bi>>8)&255, bb=bi&255;
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab+(bb-ab)*t);
+  return '#'+[r,g,bl].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function gradientColors(base){
+  // 출발점은 조금 옅게, 도착점은 원색에 가깝게 해서 진행 방향을 은은하게 표현합니다.
+  const light = mixHex(base,'#FFFFFF',0.48);
+  return { light, base };
+}
 function drawPath(path, style){
   if(!path || path.length<2) return;
-  if(engine==='leaflet'){
-    const opts={ color:style.color, weight:style.weight, opacity:.9, lineCap:'round', lineJoin:'round' };
-    if(style.dash) opts.dashArray=style.dash;
-    lRoutes.push(L.polyline(path, opts).addTo(lmap));
-  } else {
-    const opts={
-      path: path.map(p=>({lat:p[0], lng:p[1]})),
-      strokeColor: style.color,
-      strokeWeight: style.weight,
-      strokeOpacity: style.dash? 0 : .9,
-      map: gmap
-    };
-    if(style.dash){
-      opts.icons=[{ icon:{ path:google.maps.SymbolPath.CIRCLE, scale:2.4, fillOpacity:1,
-        fillColor:style.color, strokeOpacity:0 }, offset:'0', repeat:'12px' }];
+  if(style.dash){
+    if(engine==='leaflet'){
+      lRoutes.push(L.polyline(path,{ color:style.color, weight:style.weight, opacity:.82, lineCap:'round', lineJoin:'round', dashArray:style.dash }).addTo(lmap));
+    } else {
+      lRoutes.push(new google.maps.Polyline({
+        path:path.map(p=>({lat:p[0],lng:p[1]})), strokeColor:style.color, strokeWeight:style.weight, strokeOpacity:0, map:gmap,
+        icons:[{ icon:{ path:google.maps.SymbolPath.CIRCLE, scale:2.3, fillOpacity:.9, fillColor:style.color, strokeOpacity:0 }, offset:'0', repeat:'12px' }]
+      }));
     }
-    gRoutes.push(new google.maps.Polyline(opts));
+    return;
+  }
+
+  const {light,base}=gradientColors(style.color);
+  const n=path.length-1;
+  for(let i=0;i<n;i++){
+    const t=n<=1 ? 1 : i/(n-1);
+    const color=mixHex(light,base,t);
+    const seg=[path[i],path[i+1]];
+    if(engine==='leaflet'){
+      lRoutes.push(L.polyline(seg,{ color, weight:style.weight, opacity:.88, lineCap:'round', lineJoin:'round' }).addTo(lmap));
+    } else {
+      lRoutes.push(new google.maps.Polyline({
+        path:seg.map(p=>({lat:p[0],lng:p[1]})), strokeColor:color, strokeWeight:style.weight, strokeOpacity:.88, map:gmap
+      }));
+    }
   }
 }
 
@@ -1094,28 +1116,29 @@ function transitAiKey(from,to){
   ].join('|');
 }
 function normalizeTransitAi(data){
-  const raw = Array.isArray(data) ? data[0] : (data?.route || data?.result || data || {});
-  const transfers = raw.transfers ?? raw.transferCount ?? raw.transfer_count ?? null;
-  const lines = raw.lines || raw.routes || raw.routeNames || raw.route_names || [];
+  const raw = Array.isArray(data) ? (data[0]||{}) : (data?.route || data?.result || data?.transit || data || {});
+  const transfers = raw.transfers ?? raw.transferCount ?? raw.transfer_count ?? raw.transfer ?? null;
+  const lines = raw.lines || raw.routes || raw.routeNames || raw.route_names || raw.line || raw.routeName || [];
   const steps = raw.steps || raw.segments || [];
-  const lineList = Array.isArray(lines) ? lines : (typeof lines==='string' ? [lines] : []);
+  const lineList = Array.isArray(lines) ? lines : (typeof lines==='string' ? [lines] : [lines]);
   const stepList = Array.isArray(steps) ? steps : [];
   const lineText = lineList.map(x=>typeof x==='string'?x:(x?.name||x?.line||x?.route||x?.label||'')).filter(Boolean).join(' → ');
-  const stepText = stepList.map(x=>typeof x==='string'?x:(x?.line||x?.name||x?.instruction||'')).filter(Boolean).join(' → ');
+  const stepText = stepList.map(x=>typeof x==='string'?x:(x?.line||x?.name||x?.route||x?.instruction||'')).filter(Boolean).join(' → ');
   return {
     ok: true,
-    summary: String(raw.summary||raw.description||'').trim(),
-    fromStation: String(raw.fromStation||raw.departureStation||raw.originStation||raw.origin_station||'').trim(),
-    toStation: String(raw.toStation||raw.arrivalStation||raw.destinationStation||raw.destination_station||'').trim(),
+    summary: String(raw.summary||raw.description||raw.text||'').trim(),
+    fromStation: String(raw.fromStation||raw.departureStation||raw.originStation||raw.origin_station||raw.departure_station||'').trim(),
+    toStation: String(raw.toStation||raw.arrivalStation||raw.destinationStation||raw.destination_station||raw.arrival_station||'').trim(),
     lines: lineText || stepText,
-    transfers: transfers==null ? null : Number(transfers),
-    fare: String(raw.fare||raw.estimatedFare||raw.estimated_fare||raw.price||'').trim(),
+    transfers: transfers==null || transfers==='' ? null : (Number.isFinite(Number(transfers)) ? Number(transfers) : null),
+    fare: String(raw.fare||raw.estimatedFare||raw.estimated_fare||raw.price||raw.fareText||'').trim(),
     source: String(raw.source||'OpenAI').trim(),
     cachedAt: Date.now()
   };
 }
 function renderTransitAiInfo(detailEl, ai){
   if(!ai) return;
+  const old=detailEl.querySelectorAll('.transit-ai-info'); old.forEach(x=>x.remove());
   const pieces=[];
   if(ai.lines) pieces.push(`<span class="rd-board">${esc(ai.lines)}</span>`);
   if(ai.fromStation || ai.toStation){
@@ -1125,8 +1148,9 @@ function renderTransitAiInfo(detailEl, ai){
   if(ai.transfers!=null && Number.isFinite(ai.transfers)) pieces.push(`<span class="rd-dist">환승 ${ai.transfers}회</span>`);
   if(ai.fare) pieces.push(`<span class="rd-fare">약 ${esc(ai.fare)}</span>`);
   if(ai.summary) pieces.push(`<div class="hint">${esc(ai.summary)}</div>`);
+  if(ai.source) pieces.push(`<div class="hint">출처: ${esc(ai.source)}</div>`);
   if(!pieces.length) return;
-  detailEl.insertAdjacentHTML('beforeend', `<div class="rd-chain">${pieces.join('<span class="rd-arrow">·</span>')}</div>`);
+  detailEl.insertAdjacentHTML('beforeend', `<div class="rd-chain transit-ai-info">${pieces.join('<span class="rd-arrow">·</span>')}</div>`);
 }
 async function requestTransitAiOnce(from,to){
   if(!HAS_PROXY) return null;
@@ -1134,24 +1158,49 @@ async function requestTransitAiOnce(from,to){
   const cache=readTransitAiCache();
   if(cache[key]) return cache[key];
   const day=currentDay();
+  const prompt = `삿포로 여행 중 다음 두 장소 사이의 일반적인 대중교통 이용 방법을 알려주세요.
+출발: ${from.name||from.place||''} (${from.lat}, ${from.lng})
+도착: ${to.name||to.place||''} (${to.lat}, ${to.lng})
+출발 예정일: ${day?.iso||''}
+출발 예정시간: ${from.time||''}
+실시간 운행정보가 아니라 일반적인 이용 노선 기준으로 답해주세요. 실제 존재하는 역과 노선만 사용하고 확실하지 않은 정보는 만들지 마세요.`;
   const payload={
     type:'transit_route',
+    task:'transit_route',
     city:'삿포로',
     date:day?.iso||null,
+    departureTime:from.time||null,
     from:{name:from.name||'',place:from.place||'',lat:from.lat,lng:from.lng},
     to:{name:to.name||'',place:to.place||'',lat:to.lat,lng:to.lng},
-    departureTime:from.time||null,
-    instruction:'실시간 운행정보가 아니라 일반적인 대중교통 이용 방법을 알려주세요. 실제 존재하는 역/노선 위주로, 확실하지 않은 값은 추측하지 말고 빈 값으로 두세요. 예상 요금은 대략값만 제공하세요.'
+    prompt,
+    instruction:'반드시 JSON 또는 JSON 문자열로 응답해 주세요. {"summary":"...","fromStation":"...","toStation":"...","lines":["..."],"transfers":0,"fare":"약 ¥210"} 형식을 우선 사용하세요.'
   };
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 15000);
   try{
-    const res=await fetch(CFG.AI_PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const res=await fetch(CFG.AI_PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+    clearTimeout(timer);
     if(!res.ok) return null;
     const data=await res.json();
-    const candidate = data?.route || data?.result || data?.transit || data;
-    const ai=normalizeTransitAi(candidate);
-    if(!ai || (!ai.lines && !ai.fromStation && !ai.toStation && !ai.summary && !ai.fare && ai.transfers==null)) return null;
-    cache[key]=ai; writeTransitAiCache(cache); return ai;
-  }catch(e){ return null; }
+    // 프록시가 바로 JSON 객체를 반환하는 경우
+    let candidates=[data?.route,data?.result,data?.transit,data];
+    // 프록시가 OpenAI Chat Completions 응답을 그대로 전달하는 경우
+    const content=data?.choices?.[0]?.message?.content || data?.output_text || data?.response || data?.content;
+    if(content){
+      let c=String(content).replace(/```json|```/g,'').trim();
+      try{ candidates.unshift(JSON.parse(c)); }catch(e){
+        const m=c.match(/\{[\s\S]*\}/); if(m) try{ candidates.unshift(JSON.parse(m[0])); }catch(e2){}
+      }
+    }
+    for(const candidate of candidates){
+      if(!candidate) continue;
+      const ai=normalizeTransitAi(candidate);
+      if(ai && (ai.lines||ai.fromStation||ai.toStation||ai.summary||ai.fare||ai.transfers!=null)){
+        cache[key]=ai; writeTransitAiCache(cache); return ai;
+      }
+    }
+    return null;
+  }catch(e){ clearTimeout(timer); return null; }
 }
 async function hydrateTransitAiDetail(from,to,detailEl){
   const key=transitAiKey(from,to), cache=readTransitAiCache();
@@ -1243,7 +1292,7 @@ function renderTransitAiButton(legEl,from,to,cachedAi){
     }else{
       btn.textContent='AI로 노선 추천받기';
       const err=document.createElement('div'); err.className='transit-ai-status';
-      err.textContent='AI 노선 정보를 불러오지 못했어요.'; body.appendChild(err);
+      err.textContent='AI 노선 정보를 불러오지 못했어요. Cloudflare 프록시 설정과 OPENAI_API_KEY를 확인해주세요.'; body.appendChild(err);
       setTimeout(()=>err.remove(),3000);
     }
   });
