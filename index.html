@@ -453,7 +453,6 @@ const HAS_GMAP = !!(CFG.GOOGLE_MAPS_API_KEY||'').trim();
 const HAS_DIR  = HAS_GMAP && CFG.ENABLE_DIRECTIONS === true;
 const HAS_SYNC = !!((CFG.SUPABASE_URL||'').trim() && (CFG.SUPABASE_ANON_KEY||'').trim());
 const HAS_PROXY = !!(CFG.AI_PROXY_URL||'').trim();
-const HAS_TRANSIT_AI = HAS_PROXY;
 const DISABLED_MSG = 'API 비활성화 상태입니다.';
 const LS_TRIP = 'sapporo-trip:'+CFG.TRIP_ID;
 const LS_PREP = 'sapporo-prep:'+CFG.TRIP_ID;
@@ -748,36 +747,68 @@ function drawStationDot(lat,lng,color,title){
 
 /* 선택한 이동수단대로 실제 경로를 그립니다 */
 async function drawRoutesForDay(){
-  if(!HAS_DIR || !dirService) return;
-  const token = ++routeToken;
-  const day = currentDay(); if(!day) return;
-  const pts = day.stops.filter(s=>!s.tbd && s.lat!=null);
-
+  if(!dayById(activeDayId)) return;
+  const token=++routeToken;
+  const day=currentDay(); if(!day) return;
+  const pts=day.stops.filter(s=>!s.tbd&&s.lat!=null);
   for(let i=0;i<pts.length-1;i++){
-    const from=pts[i], to=pts[i+1];
-    const mode=normalizeMode(from.mode);
-    if(mode==='transit') continue; // OpenAI 응답은 상세 텍스트용으로만 사용
-    const r = await requestRoute(from,to,modeToG(mode));
-    if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
-    if(!r || !r.ok) continue;
-
-    if(mode==='transit' && r.steps.length){
-      r.steps.forEach(st=>{
-        if(st.kind==='transit'){
-          drawPath(st.path, { color: st.color || ROUTE_STYLE.transit.color, weight:6, dash:null });
-          const a=st.path[0], b=st.path[st.path.length-1];
-          if(a) drawStationDot(a[0],a[1], st.color||ROUTE_STYLE.transit.color, `${st.from} · ${st.name} 승차`);
-          if(b) drawStationDot(b[0],b[1], st.color||ROUTE_STYLE.transit.color, `${st.to} · ${st.name} 하차`);
-        } else {
-          drawPath(st.path, ROUTE_STYLE.walk);
-        }
-      });
-    } else if(mode==='walk'){
-      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.walk);
+    const from=pts[i],to=pts[i+1],mode=normalizeMode(from.mode);
+    if(token!==routeToken) return;
+    if(mode==='transit'){
+      const [g,ai]=await Promise.all([
+        HAS_DIR?requestRoute(from,to,'TRANSIT'):Promise.resolve(null),
+        requestTransitAI(from,to)
+      ]);
+      if(token!==routeToken) return;
+      if(ai?.ok && ai.stations?.length){
+        await drawAiTransitMap(from,to,ai);
+      } else if(g?.ok && g.steps?.length){
+        g.steps.forEach(st=>{
+          if(st.kind==='transit'){
+            drawPath(st.path,{color:st.color||ROUTE_STYLE.transit.color,weight:6,dash:null});
+            const a=st.path[0],b=st.path[st.path.length-1];
+            if(a) drawStationDot(a[0],a[1],st.color||ROUTE_STYLE.transit.color,`${st.from} · ${st.name} 승차`);
+            if(b) drawStationDot(b[0],b[1],st.color||ROUTE_STYLE.transit.color,`${st.to} · ${st.name} 하차`);
+          }else drawPath(st.path,ROUTE_STYLE.walk);
+        });
+      }
     } else {
-      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.drive);
+      const r=await requestRoute(from,to,modeToG(mode));
+      if(token!==routeToken) return;
+      if(!r?.ok) continue;
+      drawPath(r.overview||[],mode==='walk'?ROUTE_STYLE.walk:ROUTE_STYLE.drive);
     }
   }
+}
+async function resolveAiStationCoordinates(ai){
+  if(!ai?.stations?.length) return [];
+  const existing=ai.stations.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng)));
+  if(existing.length===ai.stations.length) return existing;
+  if(!(window.google&&google.maps&&google.maps.Geocoder)) return existing;
+  const geocoder=new google.maps.Geocoder();
+  const out=[];
+  for(const st of ai.stations.slice(0,8)){
+    if(Number.isFinite(Number(st.lat))&&Number.isFinite(Number(st.lng))){ out.push(st); continue; }
+    if(!st.name) continue;
+    try{
+      const res=await geocoder.geocode({address:`${st.name}, 삿포로, 일본`, region:'JP'});
+      const loc=res?.results?.[0]?.geometry?.location;
+      if(loc) out.push({...st,lat:loc.lat(),lng:loc.lng()});
+    }catch(e){}
+  }
+  if(out.length) ai.stations=out;
+  return out;
+}
+async function drawAiTransitMap(from,to,ai){
+  const stations=await resolveAiStationCoordinates(ai);
+  if(!stations.length) return;
+  const first=stations[0], last=stations[stations.length-1];
+  drawPath([[from.lat,from.lng],[Number(first.lat),Number(first.lng)]],ROUTE_STYLE.walk);
+  for(let i=0;i<stations.length-1;i++){
+    drawPath([[Number(stations[i].lat),Number(stations[i].lng)],[Number(stations[i+1].lat),Number(stations[i+1].lng)]],ROUTE_STYLE.transit);
+  }
+  drawPath([[Number(last.lat),Number(last.lng)],[to.lat,to.lng]],ROUTE_STYLE.walk);
+  stations.forEach(st=>drawStationDot(Number(st.lat),Number(st.lng),ROUTE_STYLE.transit.color,`${st.name||'역'}${st.line?' · '+st.line:''}`));
 }
 function renderMapForDay(){
   const day=currentDay(); clearMapLayers();
@@ -964,6 +995,7 @@ function renderScheduleScreen(){
    경로 조회 (공통) — 지도와 일정표가 같은 결과를 씁니다
    ========================================================= */
 const routeCache = {};
+const transitAiCache = {};
 let lastDirStatus = null;
 
 const DIR_STATUS_MSG = {
@@ -985,70 +1017,95 @@ const DIR_STATUS_MSG = {
 function dirStatusMsg(st){
   return DIR_STATUS_MSG[st] || `경로를 불러오지 못했어요 (${esc(String(st||'알 수 없음'))}).`;
 }
-function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }  // 1분 단위 갱신
+function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }
 
 function modeToG(mode){ const m=MODES.find(x=>x.key===normalizeMode(mode)); return m? m.g : 'WALKING'; }
 
-/* OpenAI 프록시 기반 대중교통 보완 조회
-   요청 body:
-   { type:'transit_route', city:'삿포로', from:{name,lat,lng}, to:{name,lat,lng},
-     departureDate:'YYYY-MM-DD', departureTime:'HH:mm' }
-   권장 응답:
-   { ok:true, durationMin:12, fareYen:210, summary:'난보쿠선 오도리행',
-     lines:[{name:'난보쿠선',vehicle:'지하철'}], steps:[...] }
-   proxy가 JSON 문자열을 반환해도 파싱하도록 처리합니다.
-*/
+/* Google Transit은 '현재 시각'이 아니라 일정에 적힌 일본 현지 출발시각을 사용합니다.
+   Transit 경로는 미래 시각 기준으로만 조회된다는 Google 공식 동작에 맞춥니다. */
+function transitDepartureDate(day, time){
+  if(!day?.iso) return new Date(Date.now()+5*60*1000);
+  const hhmm=(time||'09:00').slice(0,5);
+  const planned=new Date(`${day.iso}T${hhmm}:00+09:00`);
+  const minFuture=new Date(Date.now()+60*1000);
+  return planned.getTime() < minFuture.getTime() ? minFuture : planned;
+}
+
+
+/* ================= OpenAI 대중교통 보완 ================= */
+function transitAiKey(from,to){
+  const d=currentDay();
+  return `${d?.iso||''}|${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${from.time||''}`;
+}
+function normalizeAiTransit(raw){
+  let data=raw;
+  if(typeof data==='string'){
+    try{ data=JSON.parse(data); }catch(e){
+      const m=data.match(/\{[\s\S]*\}/); if(m){ try{ data=JSON.parse(m[0]); }catch(_e){} }
+    }
+  }
+  if(data?.route) data=data.route;
+  if(data?.result) data=data.result;
+  if(typeof data?.content==='string'){
+    try{ data=JSON.parse(data.content.replace(/```json|```/g,'').trim()); }catch(e){}
+  }
+  const lines=Array.isArray(data?.lines)?data.lines:[];
+  const transfers=Array.isArray(data?.transfers)?data.transfers:[];
+  const stations=Array.isArray(data?.stations)?data.stations:[];
+  const steps=Array.isArray(data?.steps)?data.steps:[];
+  const segments=Array.isArray(data?.segments)?data.segments:[];
+  const fare=Number(data?.fareYen ?? data?.estimatedFareYen ?? data?.fare);
+  return {
+    ok: data?.ok!==false,
+    summary:String(data?.summary||data?.routeSummary||''),
+    fareYen:Number.isFinite(fare)&&fare>=0?Math.round(fare):null,
+    lines, transfers, stations, steps, segments,
+    caveat:String(data?.caveat||'AI가 제공하는 대략적인 안내입니다. 실제 운행 및 요금과 다를 수 있어요.')
+  };
+}
 async function requestTransitAI(from,to){
+  const key=transitAiKey(from,to);
+  if(transitAiCache[key]) return transitAiCache[key];
   if(!HAS_TRANSIT_AI) return {ok:false,status:'AI_PROXY_OFF'};
   const day=currentDay();
+  const departure=transitDepartureDate(day,from.time);
   const payload={
     type:'transit_route',
     city:'삿포로',
-    from:{name:from.name||from.place||'', lat:from.lat, lng:from.lng},
-    to:{name:to.name||to.place||'', lat:to.lat, lng:to.lng},
-    departureDate: day?.iso || '',
-    departureTime: from.time || ''
+    from:{name:from.name||from.place||'',lat:from.lat,lng:from.lng},
+    to:{name:to.name||to.place||'',lat:to.lat,lng:to.lng},
+    departureDate:day?.iso||'',
+    departureTime:from.time||'',
+    prompt:`너는 삿포로 대중교통 안내자다. 다음 출발지에서 목적지까지 실제로 존재할 가능성이 높은 대중교통 경로를 한국어로 안내해라.\n출발: ${from.name||from.place||'출발지'} (${from.lat}, ${from.lng})\n도착: ${to.name||to.place||'도착지'} (${to.lat}, ${to.lng})\n여행일: ${day?.iso||''}\n출발 예정시각: ${from.time||''} (Japan Standard Time)\n반드시 JSON 하나만 반환하고 다른 설명은 쓰지 마라. 형식은 {"summary":"한 줄 요약","lines":[{"name":"노선명","vehicle":"지하철|버스|열차|노면전차"}],"transfers":[{"at":"환승역","fromLine":"이전 노선","toLine":"다음 노선"}],"stations":[{"name":"역명","lat":43.0,"lng":141.0,"type":"board|transfer|alight","line":"노선명"}],"steps":[{"line":"노선명","vehicle":"지하철","from":"승차역","to":"하차역","stops":3}],"fareYen":210,"caveat":"실제 운행/요금과 다를 수 있습니다."}. stations에는 지도 표시를 위해 승차/환승/하차 역의 위도·경도를 가능한 한 제공해라. 모르는 좌표를 확신하는 척하지 말고 비어 있는 경우를 허용한다.`
   };
   try{
-    const res=await fetch(CFG.AI_PROXY_URL,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
-    });
+    const res=await fetch(CFG.AI_PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) return {ok:false,status:String(res.status)};
     const raw=await res.json();
-    let data=raw;
-    if(typeof raw==='string'){ data=JSON.parse(raw); }
-    if(raw && raw.route) data=raw.route;
-    if(raw && raw.result) data=raw.result;
-    if(typeof data?.content==='string') data=JSON.parse(data.content.replace(/```json|```/g,'').trim());
-    if(!data || data.ok===false) return {ok:false,status:'BAD_RESPONSE'};
-    const durationMin=Number(data.durationMin ?? data.duration ?? data.mins);
-    const fareYen=Number(data.fareYen ?? data.fare ?? data.estimatedFareYen);
-    const lines=Array.isArray(data.lines)?data.lines:[];
-    const steps=Array.isArray(data.steps)?data.steps:[];
-    return {
-      ok:true,
-      mins:Number.isFinite(durationMin)&&durationMin>0?Math.round(durationMin):null,
-      fareYen:Number.isFinite(fareYen)&&fareYen>=0?Math.round(fareYen):null,
-      summary:String(data.summary||data.routeSummary||''),
-      lines, steps, caveat:String(data.caveat||'AI가 제공하는 대략적인 안내입니다.')
-    };
-  }catch(e){
-    return {ok:false,status:'NETWORK_ERROR'};
-  }
+    const out=normalizeAiTransit(raw);
+    transitAiCache[key]=out;
+    return out;
+  }catch(e){ return {ok:false,status:'NETWORK_ERROR'}; }
 }
-function transitAiFareText(r){
-  if(r?.fareYen==null) return '';
-  return `약 ¥${r.fareYen.toLocaleString('ja-JP')}`;
-}
-function transitAiRouteText(r){
-  if(r?.summary) return r.summary;
-  if(r?.lines?.length) return r.lines.map(x=>x.name||x.line||'노선').filter(Boolean).join(' → ');
+function aiTransitRouteText(ai){
+  if(!ai?.ok) return '';
+  if(ai.summary) return ai.summary;
+  if(ai.lines?.length) return ai.lines.map(x=>x.name||'노선').filter(Boolean).join(' → ');
   return '';
 }
+function aiTransitDetailHtml(ai){
+  if(!ai?.ok) return '';
+  const lineHtml=(ai.lines||[]).map(x=>`<span class="rd-seg line"><span class="icon">${iconSvg(vehicleIcon(x.vehicle))}</span>${esc(x.name||'노선')}</span>`).join('<span class="rd-arrow">›</span>');
+  const transferHtml=(ai.transfers||[]).map(x=>`<li class="rs transit"><div class="rs-line"><b>환승</b><span class="rs-kind">${esc(x.at||'환승역')}</span></div><div class="rs-body">${esc(x.fromLine||'이전 노선')} <span class="rs-arrow">→</span> ${esc(x.toLine||'다음 노선')}</div></li>`).join('');
+  const stepHtml=(ai.steps||[]).map(x=>`<li class="rs transit"><div class="rs-line"><b>${esc(x.line||x.name||'대중교통')}</b><span class="rs-kind">${esc(x.vehicle||'')}</span></div><div class="rs-body">${esc(x.from||'')} <span class="rs-arrow">→</span> ${esc(x.to||'')}${x.stops!=null?` · ${esc(String(x.stops))}정거장`:''}</div></li>`).join('');
+  return (lineHtml?`<div class="rd-chain">${lineHtml}</div>`:'') + ((transferHtml||stepHtml)?`<ol class="rd-steps">${transferHtml}${stepHtml}</ol>`:'');
+}
+function aiTransitFareText(ai){ return ai?.fareYen!=null ? `약 ¥${ai.fareYen.toLocaleString('ja-JP')}` : ''; }
 
 function requestRoute(from, to, g){
-  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${g}|${g==='TRANSIT'? timeBucket():'s'}`;
+  const day=currentDay();
+  const transitKeyPart = g==='TRANSIT' ? transitDepartureDate(day, from.time).getTime() : 's';
+  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${g}|${transitKeyPart}`;
   if(routeCache[key]) return routeCache[key];
 
   const p = new Promise(resolve=>{
@@ -1058,7 +1115,11 @@ function requestRoute(from, to, g){
       destination:{lat:to.lat,lng:to.lng},
       travelMode: google.maps.TravelMode[g]
     };
-    if(g==='TRANSIT') req.transitOptions = { departureTime: new Date() };
+    if(g==='TRANSIT') req.transitOptions = {
+        departureTime: transitDepartureDate(day, from.time),
+        modes: ['SUBWAY','BUS','TRAIN','TRAM','RAIL'],
+        routingPreference: 'FEWER_TRANSFERS'
+      };
     dirService.route(req, (res, status)=>{
       if(status!=='OK' || !res.routes[0] || !res.routes[0].legs[0]){
         delete routeCache[key];            // 실패는 캐시하지 않음 (재시도 가능)
@@ -1163,112 +1224,71 @@ function vehicleLabel(type){
 }
 
 async function fillLegDetail(from,to,legEl,km){
-  const metaEl   = legEl.querySelector('.legmeta');
-  const detailEl = legEl.querySelector('.route-detail');
-  const cur      = normalizeMode(from.mode);
+  const metaEl=legEl.querySelector('.legmeta');
+  const detailEl=legEl.querySelector('.route-detail');
+  const cur=normalizeMode(from.mode);
 
-  // 대중교통은 Google Directions 대신 OpenAI 프록시로 보완합니다.
   if(cur==='transit'){
-    const ai=await requestTransitAI(from,to);
-    const fallbackMin=Math.max(1, Math.round(km*1.28/25*60+8));
-    const shownMin=ai.ok && ai.mins ? ai.mins : fallbackMin;
-    const fare=ai.ok ? transitAiFareText(ai) : '';
-    const routeText=ai.ok ? transitAiRouteText(ai) : '';
-    const stepsHtml=ai.ok && ai.steps.length ? `<ol class="rd-steps">${ai.steps.map(st=>`
-      <li class="rs transit"><div class="rs-line"><b>${esc(st.line||st.name||'대중교통')}</b>${st.vehicle?` <span class="rs-kind">${esc(st.vehicle)}</span>`:''}</div>
-      <div class="rs-body">${esc(st.from||'')} ${st.from&&st.to?'<span class="rs-arrow">→</span>':''} ${esc(st.to||'')} ${st.stops?` · ${esc(String(st.stops))}정거장`:''} ${st.minutes?` · ${esc(String(st.minutes))}분`:''}</div>
-      </li>`).join('')}</ol>` : '';
-    const bits=[`<span class="rd-dur">${fmtMin(shownMin)}</span>`];
-    if(fare) bits.push(`<span class="rd-fare">${esc(fare)}</span>`);
-    else bits.push(`<span class="rd-fare muted">요금 약정 정보 없음</span>`);
-    detailEl.innerHTML=`<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>`
-      + (routeText?`<div class="rd-board" style="margin-top:7px;display:block;">${esc(routeText)}</div>`:'')
-      + stepsHtml
-      + `<div class="hint" style="margin-top:9px;">${esc(ai.caveat || 'AI 기반 대략 안내 · 실제 운행/요금과 다를 수 있어요.')}</div>`;
-    metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · ${ai.ok?'OpenAI 프록시 참고':'AI 조회 실패 · 거리 기반 추정치'} · 대중교통은 실제 시간표/요금과 다를 수 있어요`;
-    const tel=legEl.querySelector(`.mins[data-mins="transit"]`);
-    if(tel) tel.textContent=fmtMin(shownMin);
+    detailEl.innerHTML='<div class="rd-none">Google에서 예상 소요시간과 OpenAI에서 노선 정보를 불러오는 중입니다…</div>';
+    const [g,ai]=await Promise.all([
+      HAS_DIR ? requestRoute(from,to,'TRANSIT') : Promise.resolve(null),
+      requestTransitAI(from,to)
+    ]);
+    const tel=legEl.querySelector('.mins[data-mins="transit"]');
+    if(g?.ok && tel) tel.textContent=fmtMin(g.mins);
+
+    const bits=[];
+    if(g?.ok) bits.push(`<span class="rd-dur">${fmtMin(g.mins)}</span>`);
+    else bits.push(`<span class="rd-fare muted">소요시간 Google 조회 실패</span>`);
+    const fare=aiTransitFareText(ai); if(fare) bits.push(`<span class="rd-fare">${esc(fare)}</span>`);
+
+    const routeText=aiTransitRouteText(ai);
+    const detailMap=aiTransitDetailHtml(ai);
+    const googleSteps=(g?.ok && g.steps)?g.steps.filter(x=>x.kind==='transit'):[];
+    const googleChain=googleSteps.length ? `<div class="rd-chain">${googleSteps.map(st=>{
+      const style=st.color?` style="background:${esc(st.color)};border-color:${esc(st.color)};color:${esc(st.textColor||'#fff')}"`:'';
+      return `<span class="rd-seg line"${style}><span class="icon">${iconSvg(vehicleIcon(st.vehicle))}</span>${esc(st.name)}</span>`;
+    }).join('<span class="rd-arrow">›</span>')}</div>` : '';
+
+    let routeBody=detailMap || googleChain;
+    if(routeText) routeBody=`<div class="rd-board" style="display:block;margin-top:7px;">${esc(routeText)}</div>`+routeBody;
+    if(!routeBody) routeBody=`<div class="rd-none">OpenAI에서 상세 노선 정보를 받지 못했어요.</div>`;
+
+    detailEl.innerHTML=`<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>${routeBody}<div class="hint" style="margin-top:9px;">${esc(ai?.caveat||'실제 운행 및 요금과 다를 수 있어요.')}</div>`;
+    metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · 소요시간 Google · 노선/환승 OpenAI`;
+    await updateTransitMapCache(from,to,g,ai);
     return;
   }
 
-  // 칩에 표시할 각 수단 소요시간 (도보/차량은 Google Directions)
   const gList=['WALKING','DRIVING'];
   const routes={};
-  await Promise.all(gList.map(async g=>{ routes[g] = await requestRoute(from,to,g); }));
-
+  if(HAS_DIR) await Promise.all(gList.map(async gg=>{ routes[gg]=await requestRoute(from,to,gg); }));
   let anyReal=false;
   MODES.forEach(m=>{
-    const el=legEl.querySelector(`.mins[data-mins="${m.key}"]`);
-    if(!el) return;
-    const r=routes[m.g];
-    if(r && r.ok){ el.textContent=fmtMin(r.mins); anyReal=true; }
+    const el=legEl.querySelector(`.mins[data-mins="${m.key}"]`); if(!el) return;
+    const r=routes[m.g]; if(r?.ok){ el.textContent=fmtMin(r.mins); anyReal=true; }
   });
-
-  const r = routes[modeToG(cur)];
-
-  if(!r || !r.ok){
-    const st = r? r.status : 'UNKNOWN_ERROR';
-    const denied = (st==='REQUEST_DENIED' || st==='OVER_QUERY_LIMIT');
-    detailEl.innerHTML = `<div class="rd-none ${denied?'err':''}">${dirStatusMsg(st)}</div>`;
-    metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km`
-      + (anyReal? ' · 다른 수단은 구글 경로 기준' : ' · 추정치로 표시됩니다');
+  const r=routes[modeToG(cur)];
+  if(!r?.ok){
+    detailEl.innerHTML=`<div class="rd-none">${dirStatusMsg(r?.status||'UNKNOWN_ERROR')}</div>`;
+    metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km`+(anyReal?' · 다른 수단은 Google 경로 기준':' · 추정치로 표시됩니다');
     return;
   }
-
-  // ---- 요약 줄 ----
   const bits=[];
-  if(r.depart && r.arrive) bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
+  if(r.depart&&r.arrive) bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
   bits.push(`<span class="rd-dur">${fmtMin(r.mins)}</span>`);
-  if(r.fare) bits.push(`<span class="rd-fare">${esc(r.fare)}</span>`);
-  else if(cur==='transit') bits.push(`<span class="rd-fare muted">요금 정보 없음</span>`);
-  if(r.distance && cur!=='transit') bits.push(`<span class="rd-dist">${esc(r.distance)}</span>`);
+  if(r.distance) bits.push(`<span class="rd-dist">${esc(r.distance)}</span>`);
+  detailEl.innerHTML=`<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>`;
+  metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · Google 경로 기준`;
+}
 
-  // ---- 노선 배지 ----
-  let chain='';
-  const transitSteps = (r.steps||[]).filter(st=>st.kind==='transit');
-  if(cur==='transit' && r.steps.length){
-    const parts=r.steps.filter(st=> st.kind==='transit' || st.mins>=1).map(st=>{
-      if(st.kind!=='transit') return `<span class="rd-seg walk"><span class="icon">${iconSvg('walk')}</span>${st.mins}분</span>`;
-      const style = st.color? ` style="background:${esc(st.color)};border-color:${esc(st.color)};color:${esc(st.textColor||'#fff')}"`:'';
-      return `<span class="rd-seg line"${style}><span class="icon">${iconSvg(vehicleIcon(st.vehicle))}</span>${esc(st.name)}</span>`;
-    });
-    if(parts.length) chain=`<div class="rd-chain">${parts.join('<span class="rd-arrow">›</span>')}</div>`;
-  }
-
-  // ---- 탑승 카운트다운 ----
-  const first = transitSteps[0];
-  if(first && first.departAt){
-    bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>`
-      + `<span class="rd-eta" data-dep="${first.departAt}">${etaText(first.departAt)}</span>`);
-  }
-
-  // ---- 단계별 안내 ----
-  let stepsHtml='';
-  if(cur==='transit' && r.steps.length){
-    const lis = r.steps.map(st=>{
-      if(st.kind==='transit'){
-        const dot = st.color? `<i class="rd-dot-color" style="background:${esc(st.color)}"></i>` : '';
-        return `<li class="rs transit">
-          <div class="rs-line">${dot}<b>${esc(st.name)}</b>
-            <span class="rs-kind">${vehicleLabel(st.vehicle)}</span>
-            ${st.headsign? `<span class="rs-head">${esc(st.headsign)} 방면</span>`:''}</div>
-          <div class="rs-body">${esc(st.from)} <span class="rs-arrow">→</span> ${esc(st.to)}
-            ${st.stops? ` · ${st.stops}정거장`:''} · ${fmtMin(st.mins||1)}</div>
-          ${st.depart? `<div class="rs-time">${esc(st.depart)} 출발${st.arrive? ` · ${esc(st.arrive)} 도착`:''}</div>`:''}
-        </li>`;
-      }
-      if(st.mins < 1) return '';
-      return `<li class="rs walk"><div class="rs-body"><span class="icon">${iconSvg('walk')}</span> 도보 ${fmtMin(st.mins)}${st.dist? ` · ${esc(st.dist)}`:''}</div></li>`;
-    }).join('');
-    if(lis) stepsHtml = `<ol class="rd-steps">${lis}</ol>`;
-  }
-
-  detailEl.innerHTML =
-    `<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>${chain}${stepsHtml}`;
-  tickEtas();
-
-  metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준`
-    + (cur==='transit' ? ' · 지금 출발 기준이며 1분마다 갱신돼요' : '');
+/* AI가 준 승강장/역 좌표를 지도 경로 캐시에 저장합니다. Google transit geometry가 있으면 그쪽을 우선합니다. */
+async function updateTransitMapCache(from,to,g,ai){
+  const key=transitAiKey(from,to);
+  const route={g,ai};
+  window._transitMapCache=window._transitMapCache||{};
+  window._transitMapCache[key]=route;
+  if(document.getElementById('screen-map').classList.contains('active')) renderMapForDay();
 }
 
 /* 출발까지 남은 시간 (실시간 갱신) */
@@ -1291,7 +1311,7 @@ setInterval(tickEtas, 20000);
 
 /* 일정표를 보고 있는 동안 1분마다 경로 재조회 */
 setInterval(()=>{
-  if(!HAS_DIR || document.hidden) return;
+  if(document.hidden) return;
   if(dayFormOpen || editingStopId!==null) return;
   const onSched = document.getElementById('screen-schedule').classList.contains('active');
   const onMap   = document.getElementById('screen-map').classList.contains('active');
@@ -1721,7 +1741,7 @@ document.getElementById('statusBtn').addEventListener('click', ()=>{
   ).join('')
     + (lastDirStatus && lastDirStatus!=='OK' && lastDirStatus!=='ZERO_RESULTS'
         ? `<p class="hint err-hint">최근 경로 조회 응답: <code>${esc(lastDirStatus)}</code><br>${dirStatusMsg(lastDirStatus)}</p>` : '')
-    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.<br>대중교통 상세는 <code>AI_PROXY_URL</code>의 <code>type: "transit_route"</code> 요청을 사용합니다.</p>`;
+    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`;
   document.getElementById('statusModalBg').classList.add('open');
 });
 
