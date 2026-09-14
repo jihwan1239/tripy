@@ -728,12 +728,16 @@ function initLeaflet(){
   lmap = L.map('map', { zoomControl:false, attributionControl:false }).setView([43.06,141.35], 9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(lmap);
 }
-function pinHtml(num, active){
+function pinHtml(num, active, multi){
   const size = active?34:27;
-  return `<div style="width:${size}px;height:${size}px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);
+  const badge = multi
+    ? `<span style="position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;
+        background:#fff;border:1.5px solid ${active?'#1A1A1E':'#E03B4B'};transform:rotate(45deg);"></span>` : '';
+  return `<div style="position:relative;width:${size}px;height:${size}px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);
     background:${active?'#1A1A1E':'#E03B4B'};display:flex;align-items:center;justify-content:center;
     border:2.5px solid #fff;box-shadow:0 3px 9px rgba(0,0,0,.32);">
-    <span style="transform:rotate(45deg);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:${active?13:11}px;font-weight:600;">${num}</span></div>`;
+    <span style="transform:rotate(45deg);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:${active?13:11}px;font-weight:600;">${num}</span>
+    ${badge}</div>`;
 }
 let lRoutes=[], gRoutes=[], routeToken=0;
 function clearMapLayers(){
@@ -938,31 +942,33 @@ async function drawAiRoute(from, to){
   const hasTransit = route.steps.some(st=> !String(st.mode||'').includes('도보'));
   if(hasTransit) await loadOsmLines();
 
-  let drew=false;
+  // 실제 노선 데이터로 그릴 수 있는 구간만 먼저 모읍니다
+  const real = [];
   route.steps.forEach(st=>{
+    if(String(st.mode||'').includes('도보')) return;
     const a=st.fromAt, b=st.toAt;
     if(!a || !b) return;
-    drew=true;
-
-    if(String(st.mode||'').includes('도보')){
-      drawPath([a,b], ROUTE_STYLE.walk);
-      return;
-    }
-
     const m = matchOsmLine(st.line || st.mode);
-    const color = (m && m.color) || AI_COLOR;
     const seg = (m && m.path) ? sliceLine(m.path, a, b) : null;
-
-    if(seg){
-      drawPath(seg, { color, weight:6, dash:null });          // 실제 선로 모양
-    } else {
-      drawPath([a,b], { color, weight:5, dash:'10 6' });      // 노선 데이터가 없으면 직선
-    }
-    drawStationDot(a[0],a[1], color, `${st.from||''} · ${st.line||st.mode||''} 승차`);
-    drawStationDot(b[0],b[1], color, `${st.to||''} · ${st.line||st.mode||''} 하차`);
+    if(seg) real.push({ seg, color:(m && m.color) || AI_COLOR, st, a, b });
   });
 
-  if(!drew) drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
+  if(real.length){
+    // 선로 모양이 확인된 경우: 실제 노선 + 도보 구간
+    real.forEach(r=>{
+      drawPath(r.seg, { color:r.color, weight:6, dash:null });
+      drawStationDot(r.a[0], r.a[1], r.color, `${r.st.from||''} · ${r.st.line||r.st.mode||''} 승차`);
+      drawStationDot(r.b[0], r.b[1], r.color, `${r.st.to||''} · ${r.st.line||r.st.mode||''} 하차`);
+    });
+    route.steps.forEach(st=>{
+      if(!String(st.mode||'').includes('도보')) return;
+      if(st.fromAt && st.toAt) drawPath([st.fromAt, st.toAt], ROUTE_STYLE.walk);
+    });
+    return;
+  }
+
+  // 추정만 있는 경우: 장소와 장소를 직선으로 잇습니다
+  drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:AI_COLOR, weight:4, dash:'10 6' });
 }
 
 /* 선택한 이동수단대로 실제 경로를 그립니다 */
@@ -1008,29 +1014,55 @@ function renderMapForDay(){
   if(!day) return;
   const withLoc = day.stops.filter(s=>!s.tbd && s.lat!=null);
   if(!withLoc.length) return;
+  // 같은 좌표에 여러 일정이 있으면 핀 하나로 묶고, 지금 보고 있는 카드의 번호를 보여줍니다
+  const groups=[];
+  withLoc.forEach((s,i)=>{
+    const key=`${s.lat.toFixed(5)},${s.lng.toFixed(5)}`;
+    let g=groups.find(x=>x.key===key);
+    if(!g){ g={key, lat:s.lat, lng:s.lng, items:[]}; groups.push(g); }
+    g.items.push({ stop:s, num:i+1 });
+  });
+  function groupView(g){
+    const act=g.items.find(it=>it.stop.id===activeStopId);
+    return { shown: act || g.items[0], active: !!act, multi: g.items.length>1 };
+  }
+  function groupClick(g){
+    const i=g.items.findIndex(it=>it.stop.id===activeStopId);
+    const next=g.items[(i+1) % g.items.length];   // 겹친 핀은 누를 때마다 다음 일정으로
+    selectStop(next.stop.id, true, true);
+  }
+
   if(engine==='leaflet'){
     const pts=[];
-    withLoc.forEach((s,i)=>{
-      const active=s.id===activeStopId, size=active?34:27;
-      const mk=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:pinHtml(i+1,active),iconSize:[size,size],iconAnchor:[size/2,size-2]})}).addTo(lmap);
-      mk.on('click', ()=> selectStop(s.id,true,true));
-      lMarkers.push(mk); pts.push([s.lat,s.lng]);
+    groups.forEach(g=>{
+      const v=groupView(g), size=v.active?34:27;
+      const mk=L.marker([g.lat,g.lng],{
+        icon:L.divIcon({className:'', html:pinHtml(v.shown.num, v.active, v.multi),
+          iconSize:[size,size], iconAnchor:[size/2,size-2]}),
+        zIndexOffset: v.active? 1000 : 0
+      }).addTo(lmap);
+      mk.on('click', ()=> groupClick(g));
+      lMarkers.push(mk);
     });
+    withLoc.forEach(s=> pts.push([s.lat,s.lng]));
     if(!HAS_DIR) lLine=L.polyline(pts,{color:'#1A1A1E',weight:2,opacity:.4,dashArray:'1 7'}).addTo(lmap);
     if(!activeStopId) lmap.fitBounds(L.latLngBounds(pts),{padding:[46,46],maxZoom:13});
   } else {
     const pts=[];
-    withLoc.forEach((s,i)=>{
-      const active=s.id===activeStopId;
+    groups.forEach(g=>{
+      const v=groupView(g);
       const mk=new google.maps.Marker({
-        position:{lat:s.lat,lng:s.lng}, map:gmap,
-        label:{text:String(i+1),color:'#fff',fontSize:'11px',fontWeight:'600'},
-        icon:{ path:google.maps.SymbolPath.CIRCLE, fillColor:active?'#1A1A1E':'#E03B4B',
-          fillOpacity:1, strokeColor:'#fff', strokeWeight:2.5, scale:active?15:12 }
+        position:{lat:g.lat,lng:g.lng}, map:gmap,
+        label:{text:String(v.shown.num),color:'#fff',fontSize:'11px',fontWeight:'600'},
+        icon:{ path:google.maps.SymbolPath.CIRCLE, fillColor:v.active?'#1A1A1E':'#E03B4B',
+          fillOpacity:1, strokeColor:'#fff', strokeWeight:2.5, scale:v.active?15:12 },
+        zIndex: v.active? 1000 : 1,
+        title: v.multi? `${g.items.map(it=>it.num).join(', ')}번 일정` : ''
       });
-      mk.addListener('click', ()=> selectStop(s.id,true,true));
-      gMarkers.push(mk); pts.push({lat:s.lat,lng:s.lng});
+      mk.addListener('click', ()=> groupClick(g));
+      gMarkers.push(mk);
     });
+    withLoc.forEach(s=> pts.push({lat:s.lat,lng:s.lng}));
     if(!HAS_DIR) gLine=new google.maps.Polyline({path:pts,map:gmap,strokeColor:'#1A1A1E',strokeOpacity:.45,strokeWeight:2});
     if(!activeStopId){ const b=new google.maps.LatLngBounds(); pts.forEach(p=>b.extend(p)); gmap.fitBounds(b,60); }
   }
