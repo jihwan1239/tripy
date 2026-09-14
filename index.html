@@ -453,6 +453,7 @@ const HAS_GMAP = !!(CFG.GOOGLE_MAPS_API_KEY||'').trim();
 const HAS_DIR  = HAS_GMAP && CFG.ENABLE_DIRECTIONS === true;
 const HAS_SYNC = !!((CFG.SUPABASE_URL||'').trim() && (CFG.SUPABASE_ANON_KEY||'').trim());
 const HAS_PROXY = !!(CFG.AI_PROXY_URL||'').trim();
+const HAS_TRANSIT_AI = HAS_PROXY;
 const DISABLED_MSG = 'API 비활성화 상태입니다.';
 const LS_TRIP = 'sapporo-trip:'+CFG.TRIP_ID;
 const LS_PREP = 'sapporo-prep:'+CFG.TRIP_ID;
@@ -755,6 +756,7 @@ async function drawRoutesForDay(){
   for(let i=0;i<pts.length-1;i++){
     const from=pts[i], to=pts[i+1];
     const mode=normalizeMode(from.mode);
+    if(mode==='transit') continue; // OpenAI 응답은 상세 텍스트용으로만 사용
     const r = await requestRoute(from,to,modeToG(mode));
     if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
     if(!r || !r.ok) continue;
@@ -987,6 +989,64 @@ function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }  // 1분 단�
 
 function modeToG(mode){ const m=MODES.find(x=>x.key===normalizeMode(mode)); return m? m.g : 'WALKING'; }
 
+/* OpenAI 프록시 기반 대중교통 보완 조회
+   요청 body:
+   { type:'transit_route', city:'삿포로', from:{name,lat,lng}, to:{name,lat,lng},
+     departureDate:'YYYY-MM-DD', departureTime:'HH:mm' }
+   권장 응답:
+   { ok:true, durationMin:12, fareYen:210, summary:'난보쿠선 오도리행',
+     lines:[{name:'난보쿠선',vehicle:'지하철'}], steps:[...] }
+   proxy가 JSON 문자열을 반환해도 파싱하도록 처리합니다.
+*/
+async function requestTransitAI(from,to){
+  if(!HAS_TRANSIT_AI) return {ok:false,status:'AI_PROXY_OFF'};
+  const day=currentDay();
+  const payload={
+    type:'transit_route',
+    city:'삿포로',
+    from:{name:from.name||from.place||'', lat:from.lat, lng:from.lng},
+    to:{name:to.name||to.place||'', lat:to.lat, lng:to.lng},
+    departureDate: day?.iso || '',
+    departureTime: from.time || ''
+  };
+  try{
+    const res=await fetch(CFG.AI_PROXY_URL,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!res.ok) return {ok:false,status:String(res.status)};
+    const raw=await res.json();
+    let data=raw;
+    if(typeof raw==='string'){ data=JSON.parse(raw); }
+    if(raw && raw.route) data=raw.route;
+    if(raw && raw.result) data=raw.result;
+    if(typeof data?.content==='string') data=JSON.parse(data.content.replace(/```json|```/g,'').trim());
+    if(!data || data.ok===false) return {ok:false,status:'BAD_RESPONSE'};
+    const durationMin=Number(data.durationMin ?? data.duration ?? data.mins);
+    const fareYen=Number(data.fareYen ?? data.fare ?? data.estimatedFareYen);
+    const lines=Array.isArray(data.lines)?data.lines:[];
+    const steps=Array.isArray(data.steps)?data.steps:[];
+    return {
+      ok:true,
+      mins:Number.isFinite(durationMin)&&durationMin>0?Math.round(durationMin):null,
+      fareYen:Number.isFinite(fareYen)&&fareYen>=0?Math.round(fareYen):null,
+      summary:String(data.summary||data.routeSummary||''),
+      lines, steps, caveat:String(data.caveat||'AI가 제공하는 대략적인 안내입니다.')
+    };
+  }catch(e){
+    return {ok:false,status:'NETWORK_ERROR'};
+  }
+}
+function transitAiFareText(r){
+  if(r?.fareYen==null) return '';
+  return `약 ¥${r.fareYen.toLocaleString('ja-JP')}`;
+}
+function transitAiRouteText(r){
+  if(r?.summary) return r.summary;
+  if(r?.lines?.length) return r.lines.map(x=>x.name||x.line||'노선').filter(Boolean).join(' → ');
+  return '';
+}
+
 function requestRoute(from, to, g){
   const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${g}|${g==='TRANSIT'? timeBucket():'s'}`;
   if(routeCache[key]) return routeCache[key];
@@ -1107,8 +1167,32 @@ async function fillLegDetail(from,to,legEl,km){
   const detailEl = legEl.querySelector('.route-detail');
   const cur      = normalizeMode(from.mode);
 
-  // 칩에 표시할 각 수단 소요시간
-  const gList=[...new Set(MODES.map(m=>m.g))];
+  // 대중교통은 Google Directions 대신 OpenAI 프록시로 보완합니다.
+  if(cur==='transit'){
+    const ai=await requestTransitAI(from,to);
+    const fallbackMin=Math.max(1, Math.round(km*1.28/25*60+8));
+    const shownMin=ai.ok && ai.mins ? ai.mins : fallbackMin;
+    const fare=ai.ok ? transitAiFareText(ai) : '';
+    const routeText=ai.ok ? transitAiRouteText(ai) : '';
+    const stepsHtml=ai.ok && ai.steps.length ? `<ol class="rd-steps">${ai.steps.map(st=>`
+      <li class="rs transit"><div class="rs-line"><b>${esc(st.line||st.name||'대중교통')}</b>${st.vehicle?` <span class="rs-kind">${esc(st.vehicle)}</span>`:''}</div>
+      <div class="rs-body">${esc(st.from||'')} ${st.from&&st.to?'<span class="rs-arrow">→</span>':''} ${esc(st.to||'')} ${st.stops?` · ${esc(String(st.stops))}정거장`:''} ${st.minutes?` · ${esc(String(st.minutes))}분`:''}</div>
+      </li>`).join('')}</ol>` : '';
+    const bits=[`<span class="rd-dur">${fmtMin(shownMin)}</span>`];
+    if(fare) bits.push(`<span class="rd-fare">${esc(fare)}</span>`);
+    else bits.push(`<span class="rd-fare muted">요금 약정 정보 없음</span>`);
+    detailEl.innerHTML=`<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>`
+      + (routeText?`<div class="rd-board" style="margin-top:7px;display:block;">${esc(routeText)}</div>`:'')
+      + stepsHtml
+      + `<div class="hint" style="margin-top:9px;">${esc(ai.caveat || 'AI 기반 대략 안내 · 실제 운행/요금과 다를 수 있어요.')}</div>`;
+    metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · ${ai.ok?'OpenAI 프록시 참고':'AI 조회 실패 · 거리 기반 추정치'} · 대중교통은 실제 시간표/요금과 다를 수 있어요`;
+    const tel=legEl.querySelector(`.mins[data-mins="transit"]`);
+    if(tel) tel.textContent=fmtMin(shownMin);
+    return;
+  }
+
+  // 칩에 표시할 각 수단 소요시간 (도보/차량은 Google Directions)
+  const gList=['WALKING','DRIVING'];
   const routes={};
   await Promise.all(gList.map(async g=>{ routes[g] = await requestRoute(from,to,g); }));
 
@@ -1637,7 +1721,7 @@ document.getElementById('statusBtn').addEventListener('click', ()=>{
   ).join('')
     + (lastDirStatus && lastDirStatus!=='OK' && lastDirStatus!=='ZERO_RESULTS'
         ? `<p class="hint err-hint">최근 경로 조회 응답: <code>${esc(lastDirStatus)}</code><br>${dirStatusMsg(lastDirStatus)}</p>` : '')
-    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`;
+    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.<br>대중교통 상세는 <code>AI_PROXY_URL</code>의 <code>type: "transit_route"</code> 요청을 사용합니다.</p>`;
   document.getElementById('statusModalBg').classList.add('open');
 });
 
