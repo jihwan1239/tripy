@@ -167,6 +167,9 @@
   .rd-fare{ font-family:var(--font-mono); font-weight:600; color:var(--ink);
     background:var(--tint); border-radius:999px; padding:2px 9px; }
   .rd-board{ font-size:11.5px; color:var(--red); font-weight:600; }
+  .rd-eta{ font-size:10.5px; font-weight:700; color:var(--muted); background:var(--tint);
+    border-radius:999px; padding:2px 8px; margin-left:5px; }
+  .rd-eta.soon{ color:var(--red); background:var(--red-soft); }
   .rd-dot{ color:var(--muted-2); }
   .rd-chain{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px; }
   .rd-seg{ display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600;
@@ -250,6 +253,9 @@
   .sugg-add{ border:none; background:var(--ink); color:#fff; font-size:12px; font-weight:600;
     padding:8px 13px; border-radius:999px; cursor:pointer; }
   .ai-status{ font-size:12px; color:var(--muted); margin:12px 0; min-height:18px; line-height:1.55; }
+  .ai-choice{ display:flex; gap:8px; }
+  .ai-choice .btn-primary{ flex:1; min-width:0; padding:13px 10px; font-size:13px; }
+  .ai-choice .btn-primary.disabled{ background:var(--line-2); color:#fff; cursor:not-allowed; }
   .ai-error{ color:var(--red); }
 
   .disabled-box{ background:var(--tint); border:1px dashed var(--line-2); border-radius:var(--r-md);
@@ -870,18 +876,48 @@ function vehicleIcon(type){
   return 'metro';
 }
 
+/* 출발까지 남은 시간 (실시간 갱신) */
+function etaText(epoch){
+  const diff = Math.round((epoch - Date.now())/60000);
+  if(diff <= -2) return '출발함';
+  if(diff <= 0)  return '곧 출발';
+  if(diff < 60)  return `${diff}분 뒤`;
+  const h=Math.floor(diff/60), m=diff%60;
+  return m? `${h}시간 ${m}분 뒤` : `${h}시간 뒤`;
+}
+function tickEtas(){
+  document.querySelectorAll('.rd-eta').forEach(el=>{
+    const dep = Number(el.dataset.dep);
+    if(!dep) return;
+    el.textContent = etaText(dep);
+    el.classList.toggle('soon', dep - Date.now() < 5*60*1000);
+  });
+}
+setInterval(tickEtas, 20000);
+
+/* 일정표를 보고 있는 동안 1분마다 경로를 다시 불러옵니다 */
+setInterval(()=>{
+  if(!HAS_DIR) return;
+  if(document.hidden) return;
+  if(!document.getElementById('screen-schedule').classList.contains('active')) return;
+  if(dayFormOpen || editingStopId!==null) return;
+  for(const k in dirCache) delete dirCache[k];
+  renderScheduleScreen();
+}, 60000);
+
 function fetchDirectionsForLeg(from,to,legEl,km){
   if(!dirService) return;
   const metaEl   = legEl.querySelector('.legmeta');
   const detailEl = legEl.querySelector('.route-detail');
   const dayIso   = (currentDay()||{}).iso;
-  const depart   = stopDateTime(dayIso, from.time);
+  const depart   = new Date();                 // 지금 시각 기준으로 조회
+  const bucket   = Math.floor(Date.now()/(60*1000));    // 1분마다 새로 조회
 
   const needed=[...new Set(MODES.map(m=>m.g))];
   let pending=needed.length; const results={};
 
   needed.forEach(g=>{
-    const ck=`${from.lat},${from.lng}|${to.lat},${to.lng}|${g}|${dayIso}|${from.time}`;
+    const ck=`${from.lat},${from.lng}|${to.lat},${to.lng}|${g}|${g==='TRANSIT'? bucket : 'static'}`;
     if(dirCache[ck]!==undefined){ results[g]=dirCache[ck]; if(--pending===0) apply(); return; }
     const req={ origin:{lat:from.lat,lng:from.lng}, destination:{lat:to.lat,lng:to.lng}, travelMode:google.maps.TravelMode[g] };
     if(g==='TRANSIT') req.transitOptions={ departureTime: depart };
@@ -893,6 +929,7 @@ function fetchDirectionsForLeg(from,to,legEl,km){
           mins: Math.round(lg.duration.value/60),
           fare: route.fare ? route.fare.text : null,
           depart: lg.departure_time ? lg.departure_time.text : null,
+          departAt: lg.departure_time && lg.departure_time.value ? lg.departure_time.value.getTime() : null,
           arrive: lg.arrival_time ? lg.arrival_time.text : null,
           steps: (lg.steps||[]).map(st=>{
             if(st.travel_mode==='TRANSIT' && st.transit){
@@ -906,6 +943,7 @@ function fetchDirectionsForLeg(from,to,legEl,km){
                 from: (st.transit.departure_stop||{}).name || '',
                 to: (st.transit.arrival_stop||{}).name || '',
                 depart: st.transit.departure_time ? st.transit.departure_time.text : null,
+                departAt: st.transit.departure_time && st.transit.departure_time.value ? st.transit.departure_time.value.getTime() : null,
                 stops: st.transit.num_stops || 0
               };
             }
@@ -932,7 +970,9 @@ function fetchDirectionsForLeg(from,to,legEl,km){
 
     if(r){
       const bits=[];
-      if(r.depart && r.arrive) bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
+      if(r.depart && r.arrive){
+        bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
+      }
       if(r.fare) bits.push(`<span class="rd-fare">${esc(r.fare)}</span>`);
 
       let chain='';
@@ -946,12 +986,15 @@ function fetchDirectionsForLeg(from,to,legEl,km){
 
         const first = r.steps.find(st=>st.kind==='transit');
         if(first && first.depart){
-          bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>`);
+          const eta = first.departAt
+            ? `<span class="rd-eta" data-dep="${first.departAt}">${etaText(first.departAt)}</span>` : '';
+          bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>${eta}`);
         }
       }
 
       detailEl.innerHTML = (bits.length||chain)
         ? `<div class="rd-head">${bits.join('<span class="rd-dot">·</span>')}</div>${chain}` : '';
+      tickEtas();
     } else {
       detailEl.innerHTML='';
     }
@@ -959,11 +1002,11 @@ function fetchDirectionsForLeg(from,to,legEl,km){
     if(!anyReal){
       metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · 경로를 찾지 못해 추정치로 표시됩니다`;
     } else {
-      const future = stopDateTime(dayIso, from.time).getTime() - Date.now() > 6*24*60*60*1000;
+      const isTrip = dayIso === new Date().toISOString().slice(0,10);
       metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준`
         + (normalizeMode(from.mode)==='transit'
-            ? (future ? ' · 여행일 시간표 기준 예상값이라 실제 운행과 다를 수 있어요'
-                      : ' · 출발 시각이 가까워지면 실시간 운행 정보가 반영돼요')
+            ? (isTrip ? ' · <b>지금 출발</b> 기준 실시간 운행 정보'
+                      : ' · <b>지금 출발</b> 기준이라 여행 당일에는 시간표가 다를 수 있어요')
             : '');
     }
   }
@@ -1162,7 +1205,7 @@ function switchScreen(name){
     renderMapForDay(); renderCarousel();
     setTimeout(()=>{ if(engine==='leaflet') lmap.invalidateSize(); },60);
   }
-  if(name==='schedule'){ closeForm(); closeDayForm(); renderScheduleScreen(); }
+  if(name==='schedule'){ closeForm(); closeDayForm(); if(HAS_DIR){ for(const k in dirCache) delete dirCache[k]; } renderScheduleScreen(); }
   if(name==='prep'){ renderPrep(); }
 }
 document.querySelectorAll('.navbtn').forEach(b=> b.addEventListener('click', ()=> switchScreen(b.dataset.screen)));
@@ -1254,12 +1297,22 @@ function openAiModal(){
     const badge = mode==='proxy'
       ? '공용 AI 연결을 사용 중이에요.'
       : '내 기기에 저장된 개인 키를 사용 중이에요.';
+    const anchor = activeStopId ? (stopById(activeStopId)||{}).stop : null;
+    const anchorOk = anchor && currentDay() && currentDay().stops.some(x=>x.id===anchor.id);
     panel.innerHTML=`
-      <button class="btn-primary" id="aiRunBtn">이 날 일정 기준으로 추천받기</button>
+      <div class="ai-choice">
+        <button class="btn-primary" id="aiRunDay">이 날 전체 추천</button>
+        <button class="btn-primary ${anchorOk?'':'disabled'}" id="aiRunNext" ${anchorOk?'':'disabled'}>다음 코스 추천</button>
+      </div>
+      <p class="hint">${anchorOk
+        ? `<b>${esc(anchor.name)}</b> 다음에 들를 만한 곳을 찾아줘요.`
+        : '지도 탭에서 장소를 고르면 그 다음 코스를 추천받을 수 있어요.'}</p>
       <div class="ai-status" id="aiStatus">${badge}</div>
       <div id="aiResults"></div>
       ${mode==='personal'? '<button class="link-btn" id="clearKeyBtn">저장된 내 키 삭제</button>':''}`;
-    document.getElementById('aiRunBtn').addEventListener('click', runAiRecommend);
+    document.getElementById('aiRunDay').addEventListener('click', ()=> runAiRecommend('day'));
+    const nextBtn = document.getElementById('aiRunNext');
+    if(anchorOk) nextBtn.addEventListener('click', ()=> runAiRecommend('next'));
     const ck=document.getElementById('clearKeyBtn');
     if(ck) ck.addEventListener('click', ()=>{
       try{ localStorage.removeItem(LS_AIKEY); }catch(e){}
@@ -1270,16 +1323,43 @@ function openAiModal(){
   aiModalBg.classList.add('open');
 }
 
-function buildAiPayload(day){
-  return {
+function buildAiPayload(day, kind){
+  const payload = {
     city: '삿포로',
     date: `${fmtDate(day.iso)} (${fmtDow(day.iso)})`,
     theme: day.label||'',
     stops: day.stops.map(s=>({ time:s.time, name:s.name, cat:s.cat, note:s.note||'' }))
   };
+  if(kind==='next'){
+    const i = day.stops.findIndex(x=>x.id===activeStopId);
+    const cur  = day.stops[i];
+    const next = day.stops[i+1];
+    if(cur){
+      payload.focus = {
+        after: cur.name,
+        afterTime: cur.time,
+        before: next? next.name : null,
+        beforeTime: next? next.time : null
+      };
+    }
+  }
+  return payload;
 }
 
-async function runAiRecommend(){
+function buildAiPrompt(day, kind){
+  const text = day.stops.map(s=>`${s.time} ${s.name} (${s.cat})${s.note? ' - '+s.note:''}`).join('\n');
+  const head = `오늘(${fmtDate(day.iso)} ${fmtDow(day.iso)}, 테마: ${day.label}) 일정입니다.\n${text}\n\n`;
+  if(kind==='next'){
+    const i = day.stops.findIndex(x=>x.id===activeStopId);
+    const cur=day.stops[i], next=day.stops[i+1];
+    if(cur && next) return head + `"${cur.name}"(${cur.time})을 마치고 "${next.name}"(${next.time})로 가기 전에 들를 만한 곳을 추천해줘. 두 장소 사이 동선에서 크게 벗어나지 않고, 남는 시간에 맞는 곳으로.`;
+    if(cur) return head + `"${cur.name}"(${cur.time}) 다음에 이어서 갈 만한 곳을 추천해줘. 도보나 짧은 대중교통으로 갈 수 있는 거리로.`;
+  }
+  return head + `이 동선에 자연스럽게 어울리는 장소를 추천해줘.`;
+}
+
+async function runAiRecommend(kind){
+  kind = kind || 'day';
   const st=document.getElementById('aiStatus'), rs=document.getElementById('aiResults');
   const day=currentDay();
   if(!day){ st.textContent='날짜가 없어요.'; return; }
@@ -1290,20 +1370,19 @@ async function runAiRecommend(){
     if(aiMode()==='proxy'){
       const res=await fetch(CFG.AI_PROXY_URL,{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(buildAiPayload(day))
+        body: JSON.stringify(buildAiPayload(day, kind))
       });
       if(res.status===429){ st.textContent='요청이 너무 많아요. 잠시 후 다시 시도해주세요.'; st.className='ai-status ai-error'; return; }
       if(!res.ok){ st.textContent=`요청이 실패했어요 (${res.status}). 관리자에게 프록시 주소 확인을 요청해주세요.`; st.className='ai-status ai-error'; return; }
       const data=await res.json();
       list = Array.isArray(data) ? data : (data.items||data.places||[]);
     } else {
-      const text=day.stops.map(s=>`${s.time} ${s.name} (${s.cat})${s.note? ' - '+s.note:''}`).join('\n');
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+personalKey()},
         body:JSON.stringify({ model:CFG.OPENAI_MODEL, temperature:0.7, messages:[
           {role:'system', content:'너는 삿포로 현지 여행 코디네이터야. 사용자가 준 하루 일정을 참고해서, 동선상 어울리는 장소(카페, 포토스팟, 소품샵, 작은 명소 등) 3에서 5곳을 추천해. 반드시 JSON 배열만 출력하고 다른 텍스트는 쓰지마. 형식: [{"name":"장소명","category":"관광|식사|휴식|선택 중 하나","reason":"추천 이유, 한국어 1에서 2문장"}]'},
-          {role:'user', content:`오늘(${fmtDate(day.iso)} ${fmtDow(day.iso)}, 테마: ${day.label}) 일정입니다.\n${text}\n\n이 동선에 자연스럽게 어울리는 장소를 추천해줘.`}
+          {role:'user', content: buildAiPrompt(day, kind)}
         ]})
       });
       if(res.status===401){ st.textContent='키가 올바르지 않아요. 저장된 키를 삭제하고 다시 입력해주세요.'; st.className='ai-status ai-error'; return; }
