@@ -706,7 +706,7 @@ function clearMapLayers(){
 const ROUTE_STYLE = {
   walk:  { color:'#8E8E96', weight:4, dash:'2 7' },
   drive: { color:'#2F6BD8', weight:5, dash:null },
-  transit:{ color:'#E03B4B', weight:6, dash:null }
+  transit:{ color:'#35A853', weight:6, dash:null }
 };
 
 function drawPath(path, style){
@@ -746,6 +746,36 @@ function drawStationDot(lat,lng,color,title){
 }
 
 /* 선택한 이동수단대로 경로를 그립니다. 대중교통은 직선 표시입니다. */
+const stationPairCache = {};
+function findNearestTransitStation(lat,lng){
+  return new Promise(resolve=>{
+    if(!(window.google&&google.maps&&google.maps.places&&gmap)) return resolve(null);
+    const key=`${lat.toFixed(5)},${lng.toFixed(5)}`;
+    if(Object.prototype.hasOwnProperty.call(stationPairCache,key)) return resolve(stationPairCache[key]);
+    const service=new google.maps.places.PlacesService(gmap);
+    service.nearbySearch({location:{lat,lng},radius:1200,type:'transit_station'},(results,status)=>{
+      if(status!==google.maps.places.PlacesServiceStatus.OK || !results?.length){stationPairCache[key]=null;return resolve(null);}
+      const ranked=results.filter(r=>r.geometry?.location).map(r=>{
+        const loc=r.geometry.location, plat=loc.lat(), plng=loc.lng();
+        return {...r,_lat:plat,_lng:plng,_dist:haversineKm({lat,lng},{lat:plat,lng:plng})};
+      }).sort((a,b)=>a._dist-b._dist);
+      stationPairCache[key]=ranked[0]||null; resolve(stationPairCache[key]);
+    });
+  });
+}
+async function drawTransitStationPair(from,to){
+  const [a,b]=await Promise.all([findNearestTransitStation(from.lat,from.lng),findNearestTransitStation(to.lat,to.lng)]);
+  if(!a||!b){
+    drawPath([[from.lat,from.lng],[to.lat,to.lng]],ROUTE_STYLE.transit);
+    return;
+  }
+  const ap=[a._lat,a._lng], bp=[b._lat,b._lng];
+  drawPath([[from.lat,from.lng],ap],ROUTE_STYLE.walk);
+  drawPath([ap,bp],ROUTE_STYLE.transit);
+  drawPath([bp,[to.lat,to.lng]],ROUTE_STYLE.walk);
+  drawStationDot(a._lat,a._lng,ROUTE_STYLE.transit.color,`${a.name||'근처역'} · 출발역`);
+  drawStationDot(b._lat,b._lng,ROUTE_STYLE.transit.color,`${b.name||'근처역'} · 도착역`);
+}
 async function drawRoutesForDay(){
   if(!dayById(activeDayId)) return;
   const token=++routeToken;
@@ -755,45 +785,14 @@ async function drawRoutesForDay(){
     const from=pts[i],to=pts[i+1],mode=normalizeMode(from.mode);
     if(token!==routeToken) return;
     if(mode==='transit'){
-      /* 대중교통은 지도에서 출발지↔도착지를 직선으로 표시합니다. */
-      drawPath([[from.lat,from.lng],[to.lat,to.lng]],ROUTE_STYLE.transit);
-    } else {
+      await drawTransitStationPair(from,to);
+    }else{
       const r=await requestRoute(from,to,modeToG(mode));
       if(token!==routeToken) return;
       if(!r?.ok) continue;
       drawPath(r.overview||[],mode==='walk'?ROUTE_STYLE.walk:ROUTE_STYLE.drive);
     }
   }
-}
-async function resolveAiStationCoordinates(ai){
-  if(!ai?.stations?.length) return [];
-  const existing=ai.stations.filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng)));
-  if(existing.length===ai.stations.length) return existing;
-  if(!(window.google&&google.maps&&google.maps.Geocoder)) return existing;
-  const geocoder=new google.maps.Geocoder();
-  const out=[];
-  for(const st of ai.stations.slice(0,8)){
-    if(Number.isFinite(Number(st.lat))&&Number.isFinite(Number(st.lng))){ out.push(st); continue; }
-    if(!st.name) continue;
-    try{
-      const res=await geocoder.geocode({address:`${st.name}, 삿포로, 일본`, region:'JP'});
-      const loc=res?.results?.[0]?.geometry?.location;
-      if(loc) out.push({...st,lat:loc.lat(),lng:loc.lng()});
-    }catch(e){}
-  }
-  if(out.length) ai.stations=out;
-  return out;
-}
-async function drawAiTransitMap(from,to,ai){
-  const stations=await resolveAiStationCoordinates(ai);
-  if(!stations.length) return;
-  const first=stations[0], last=stations[stations.length-1];
-  drawPath([[from.lat,from.lng],[Number(first.lat),Number(first.lng)]],ROUTE_STYLE.walk);
-  for(let i=0;i<stations.length-1;i++){
-    drawPath([[Number(stations[i].lat),Number(stations[i].lng)],[Number(stations[i+1].lat),Number(stations[i+1].lng)]],ROUTE_STYLE.transit);
-  }
-  drawPath([[Number(last.lat),Number(last.lng)],[to.lat,to.lng]],ROUTE_STYLE.walk);
-  stations.forEach(st=>drawStationDot(Number(st.lat),Number(st.lng),ROUTE_STYLE.transit.color,`${st.name||'역'}${st.line?' · '+st.line:''}`));
 }
 function renderMapForDay(){
   const day=currentDay(); clearMapLayers();
