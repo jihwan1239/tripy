@@ -53,7 +53,7 @@ window.APP_CONFIG = {
 
      설정 방법은 README.md의 "친구들과 공유하기" 항목을 보세요. */
 
-  SUPABASE_URL: "https://vgcumkqgznrratmmesxz.supabase.co/rest/v1/",        // 예: https://xxxxxxxx.supabase.co
+  SUPABASE_URL: "https://vgcumkqgznrratmmesxz.supabase.co",        // 예: https://xxxxxxxx.supabase.co
   SUPABASE_ANON_KEY: "sb_publishable_fDpApI-Yz0o2Oo_7d3DxgA_xB14GbHE",   // Supabase의 anon public 키
   TRIP_ID: "sapporo-2026"  // 여행방 이름. 친구들과 같은 값을 쓰면 같은 일정을 봅니다.
 
