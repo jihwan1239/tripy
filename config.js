@@ -16,12 +16,12 @@ window.APP_CONFIG = {
 
   /* Google Maps JavaScript API 키.
      비워두면 기본 지도(OpenStreetMap)가 표시됩니다. */
-  GOOGLE_MAPS_API_KEY: "",
+  GOOGLE_MAPS_API_KEY: "AIzaSyC7ZEN2XXin5XQcOVUP_WxiD8pPaGnQfCg",
 
   /* true로 두면 위 키를 이용해 실제 경로 기반 소요시간을 계산합니다.
      (Google Cloud에서 Directions API도 함께 활성화 필요)
      false거나 지도 키가 없으면 거리 기반 추정치로 표시됩니다. */
-  ENABLE_DIRECTIONS: false,
+  ENABLE_DIRECTIONS: true,
 
 
   /* ========== 2. AI 장소 추천 ========== */
