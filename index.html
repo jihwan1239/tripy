@@ -137,6 +137,42 @@
   .stay-inherit{ font-size:10px; font-weight:600; color:var(--muted-2);
     border:1px solid var(--line-2); border-radius:999px; padding:1px 6px; margin-left:4px; }
   .stay-tag{ background:var(--red-soft) !important; color:var(--red) !important; }
+  .opt-tag{ background:#FFF4E0 !important; color:#B4720A !important; }
+  .flight-tag{ background:#E9F0FF !important; color:#2F6BD8 !important; }
+
+  /* 선택 일정 */
+  .stop.optional{ border:1px dashed var(--line-2); box-shadow:none; background:#FFFDF8; }
+  .stop .num.opt{ background:#E8A33D; }
+
+  /* 확정/선택 토글 */
+  .seg-toggle{ display:flex; gap:0; border:1px solid var(--line-2); border-radius:var(--r-sm); overflow:hidden; }
+  .seg-toggle .seg{ flex:1; border:none; background:#fff; color:var(--muted);
+    padding:11px 0; font-size:13.5px; font-weight:700; cursor:pointer; }
+  .seg-toggle .seg.on{ background:var(--ink); color:#fff; }
+
+  /* 하루 요약 */
+  .day-summary{ display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .ds-left{ display:flex; align-items:center; gap:7px; flex:1; min-width:0; flex-wrap:wrap; }
+  .ds-chip{ font-size:11px; font-weight:700; border-radius:999px; padding:3px 9px; }
+  .ds-chip.fix{ background:var(--red-soft); color:var(--red); }
+  .ds-chip.opt{ background:#FFF4E0; color:#B4720A; }
+  .ds-move{ font-size:11.5px; color:var(--muted); font-weight:600; }
+  .ds-sub{ font-size:11px; color:var(--muted-2); }
+  .ds-toggle{ flex:0 0 auto; border:1px solid var(--ink); background:var(--ink); color:#fff;
+    border-radius:999px; padding:6px 12px; font-size:11.5px; font-weight:700; cursor:pointer; }
+  .ds-toggle.off{ background:#fff; color:var(--ink); }
+
+  /* 구간 사이 추가 버튼 */
+  .leg .rail{ flex-direction:column; align-items:center; }
+  .leg .rail span{ flex:1; }
+  .leg-add{ width:22px; height:22px; flex:0 0 22px; border-radius:50%; border:1px dashed var(--line-2);
+    background:#fff; color:var(--muted); font-size:14px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; margin:4px 0; padding:0; }
+  .leg-add:hover{ border-color:var(--ink); color:var(--ink); border-style:solid; }
+
+  /* 항공편 폼 */
+  .fl-sec{ font-size:12px; font-weight:700; color:var(--red); margin-bottom:10px;
+    padding-bottom:7px; border-bottom:1px solid var(--line); }
   .sched-days{ display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
   .sched-days::-webkit-scrollbar{ display:none; }
   .sched-days .daychip{ box-shadow:none; background:var(--tint); }
@@ -162,7 +198,7 @@
 
   .leg{ display:flex; gap:12px; padding:4px 0; }
   .leg .rail{ flex:0 0 22px; display:flex; justify-content:center; }
-  .leg .rail span{ width:2px; background:var(--line-2); border-radius:2px; min-height:56px; }
+  .leg .rail span{ width:2px; background:var(--line-2); border-radius:2px; min-height:16px; }
   .leg .legbody{ flex:1; padding:8px 0 8px 2px; }
   .leg .modes{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
   .leg .modes::-webkit-scrollbar{ display:none; }
@@ -435,12 +471,18 @@
         <button class="mini-btn" id="editDayBtn"><span class="icon" data-i="pencil"></span>날짜 편집</button>
         <button class="mini-btn" id="addDayBtn"><span class="icon" data-i="plus"></span>날짜</button>
       </div>
+      <button class="stay-row" id="flightBtn">
+        <span class="icon" data-i="plane"></span>
+        <span class="stay-txt" id="flightLabel">항공편 입력하기</span>
+        <span class="stay-edit">변경</span>
+      </button>
       <button class="stay-row" id="stayBtn">
         <span class="icon" data-i="bed"></span>
         <span class="stay-txt" id="stayLabel">숙소 설정하기</span>
         <span class="stay-edit">변경</span>
       </button>
       <div class="sched-days" id="daybar-sched"></div>
+      <div class="day-summary" id="daySummary"></div>
     </div>
     <div class="list-body">
       <div id="stopListEdit"></div>
@@ -633,6 +675,24 @@ let engine='leaflet';
 let lmap, lMarkers=[], lLine, gmap, gMarkers=[], gLine, dirService;
 let scrollTimer=null, suppressScrollSync=false, syncTimer=null, pushTimer=null;
 
+let showOptional = (()=>{ try{ return localStorage.getItem('sapporo:showOpt')!=='0'; }catch(e){ return true; } })();
+function setShowOptional(v){
+  showOptional = v;
+  try{ localStorage.setItem('sapporo:showOpt', v?'1':'0'); }catch(e){}
+}
+/* 화면에 반영할 일정 (선택 일정 제외 모드 반영) */
+function visibleStops(day){
+  if(!day) return [];
+  return showOptional ? day.stops : day.stops.filter(s=>!s.opt);
+}
+function midTime(a,b){
+  const toM=h=>{ const m=/^(\d{1,2}):(\d{2})$/.exec(h||''); return m? (+m[1])*60+(+m[2]) : null; };
+  const x=toM(a), y=toM(b);
+  if(x==null) return b||'12:00';
+  if(y==null) return a;
+  const t=Math.round((x+y)/2);
+  return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
 function dayById(id){ return TRIP.days.find(d=>d.id===id); }
 function currentDay(){ return dayById(activeDayId) || TRIP.days[0]; }
 function stopById(id){ for(const d of TRIP.days){ const s=d.stops.find(x=>x.id===id); if(s) return {stop:s, day:d}; } return null; }
@@ -996,7 +1056,7 @@ async function drawRoutesForDay(){
   if(!HAS_DIR || !dirService) return;
   const token = ++routeToken;
   const day = currentDay(); if(!day) return;
-  const pts = day.stops.filter(s=>!s.tbd && s.lat!=null);
+  const pts = visibleStops(day).filter(s=>!s.tbd && s.lat!=null);
 
   for(let i=0;i<pts.length-1;i++){
     const from=pts[i], to=pts[i+1];
@@ -1032,7 +1092,7 @@ async function drawRoutesForDay(){
 function renderMapForDay(){
   const day=currentDay(); clearMapLayers();
   if(!day) return;
-  const withLoc = day.stops.filter(s=>!s.tbd && s.lat!=null);
+  const withLoc = visibleStops(day).filter(s=>!s.tbd && s.lat!=null);
   if(!withLoc.length) return;
   // 같은 좌표에 여러 일정이 있으면 핀 하나로 묶고, 지금 보고 있는 카드의 번호를 보여줍니다
   const groups=[];
@@ -1142,13 +1202,14 @@ function setCarouselMetrics(){
 function renderCarousel(){
   const day=currentDay(), wrap=document.getElementById('carousel');
   wrap.innerHTML=''; setCarouselMetrics();
-  if(!day || !day.stops.length){
-    wrap.innerHTML=`<div class="place-card empty">아직 일정이 없어요.<br>일정표 탭에서 장소를 추가해보세요.</div>`;
+  if(!day || !visibleStops(day).length){
+    wrap.innerHTML=`<div class="place-card empty">표시할 일정이 없어요.<br>일정표 탭에서 장소를 추가해보세요.</div>`;
     return;
   }
-  const withLoc=day.stops.filter(s=>!s.tbd && s.lat!=null);
+  const list=visibleStops(day);
+  const withLoc=list.filter(s=>!s.tbd && s.lat!=null);
   if(!activeStopId && withLoc.length) activeStopId=withLoc[0].id;
-  day.stops.forEach(s=>{
+  list.forEach(s=>{
     const idx=withLoc.indexOf(s);
     const card=document.createElement('div');
     card.className='place-card'+(s.id===activeStopId?' active':'');
@@ -1171,8 +1232,9 @@ function renderCarousel(){
 }
 /* 카드 하단에 "다음 이동" 요약 (AI 추정 노선 포함) */
 function nextMoveHtml(stop, day){
-  const i = day.stops.findIndex(x=>x.id===stop.id);
-  const next = day.stops[i+1];
+  const list = visibleStops(day);
+  const i = list.findIndex(x=>x.id===stop.id);
+  const next = list[i+1];
   if(!next) return '';
   const mode = normalizeMode(stop.mode);
   const m = MODES.find(x=>x.key===mode) || MODES[0];
@@ -1237,6 +1299,20 @@ function renderScheduleScreen(){
   document.getElementById('schedTitle').textContent = day? `${fmtDate(day.iso)} (${fmtDow(day.iso)}) · ${day.label}` : '일정표';
   renderDayChips('daybar-sched', ()=>{ closeForm(); closeDayForm(); renderScheduleScreen(); });
 
+  const flLb=document.getElementById('flightLabel');
+  const flBtn=document.getElementById('flightBtn');
+  const F=TRIP.flights;
+  if(F && (F.in||F.out)){
+    const parts=[];
+    if(F.in)  parts.push(`입국 ${F.in.time}`);
+    if(F.out) parts.push(`출국 ${F.out.time}`);
+    flLb.innerHTML = `<b>항공편</b> ${esc(parts.join(' · '))}`;
+    flBtn.classList.add('set');
+  } else {
+    flLb.textContent='항공편 입력하기';
+    flBtn.classList.remove('set');
+  }
+
   const stayLb=document.getElementById('stayLabel');
   const stayBtn=document.getElementById('stayBtn');
   const dIdx = TRIP.days.findIndex(x=>x.id===activeDayId);
@@ -1251,15 +1327,25 @@ function renderScheduleScreen(){
   }
 
   const wrap=document.getElementById('stopListEdit'); wrap.innerHTML='';
-  if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; return; }
-  if(!day.stops.length){ wrap.innerHTML=`<div class="empty-note">이 날은 아직 일정이 비어있어요.</div>`; return; }
+  const sumEl=document.getElementById('daySummary');
+  if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; sumEl.innerHTML=''; return; }
 
-  const withLoc=day.stops.filter(s=>!s.tbd && s.lat!=null);
-  day.stops.forEach((s,i)=>{
+  renderDaySummary(day, sumEl);
+
+  const list = visibleStops(day);
+  if(!list.length){
+    wrap.innerHTML = day.stops.length
+      ? `<div class="empty-note">이 날은 모두 '선택' 일정이에요.<br>위에서 선택 일정을 켜면 보입니다.</div>`
+      : `<div class="empty-note">이 날은 아직 일정이 비어있어요.</div>`;
+    return;
+  }
+
+  const withLoc=list.filter(s=>!s.tbd && s.lat!=null);
+  list.forEach((s,i)=>{
     const idx=withLoc.indexOf(s);
-    const el=document.createElement('div'); el.className='stop';
+    const el=document.createElement('div'); el.className='stop'+(s.opt?' optional':'');
     el.innerHTML=`
-      <div class="num ${s.tbd?'tbd':''}">${idx>=0? idx+1:'?'}</div>
+      <div class="num ${s.tbd?'tbd':''} ${s.opt?'opt':''}">${idx>=0? idx+1:'?'}</div>
       <div class="body">
         <div class="time">${esc(s.time)}</div>
         <div class="name">${esc(s.name)}</div>
@@ -1268,12 +1354,14 @@ function renderScheduleScreen(){
         <div class="row2">
           <span class="tag">${s.cat}${s.tbd?' · 위치 미정':''}</span>
           ${s.stay? '<span class="tag stay-tag">숙소 출발</span>':''}
+          ${s.opt? '<span class="tag opt-tag">선택</span>':''}
+          ${s.flight? `<span class="tag flight-tag">${s.flight==='in'?'입국':'출국'}</span>`:''}
           <button class="edit-btn">수정</button>
         </div>
       </div>`;
     el.querySelector('.edit-btn').addEventListener('click', ()=> openForm(s.id));
     wrap.appendChild(el);
-    const next=day.stops[i+1];
+    const next=list[i+1];
     if(next) wrap.appendChild(buildLeg(s,next));
   });
 }
@@ -1421,6 +1509,42 @@ async function geocodeAiRoute(route, from, to){
   return route;
 }
 
+/* ---- 일본 공휴일 (Nager.Date, 키 불필요 · 연 단위 캐시) ---- */
+const holidayCache = {};
+async function jpHolidays(year){
+  if(holidayCache[year]) return holidayCache[year];
+  const lsKey = `jp-holidays:${year}`;
+  try{
+    const raw = localStorage.getItem(lsKey);
+    if(raw){ holidayCache[year]=JSON.parse(raw); return holidayCache[year]; }
+  }catch(e){}
+  try{
+    const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/JP`);
+    if(!res.ok) throw new Error(res.status);
+    const list = await res.json();
+    const map = {};
+    list.forEach(h=>{ map[h.date] = h.localName || h.name; });
+    holidayCache[year]=map;
+    try{ localStorage.setItem(lsKey, JSON.stringify(map)); }catch(e){}
+    return map;
+  }catch(e){
+    holidayCache[year] = {};
+    return holidayCache[year];
+  }
+}
+async function dayContext(iso){
+  if(!iso) return { date:'', weekday:'', dayType:'평일' };
+  const d = new Date(iso+'T00:00:00');
+  const wd = DOW[d.getDay()];
+  const map = await jpHolidays(d.getFullYear());
+  const holiday = map[iso] || null;
+  let dayType = '평일';
+  if(holiday) dayType = `공휴일(${holiday})`;
+  else if(d.getDay()===0) dayType = '일요일';
+  else if(d.getDay()===6) dayType = '토요일';
+  return { date: iso, weekday: wd, dayType, holiday };
+}
+
 /* AI에게 대중교통 경로를 물어봅니다 (참고용 추정) */
 async function askAiRoute(from, to, btn, box){
   if(!aiUsable()){
@@ -1430,12 +1554,15 @@ async function askAiRoute(from, to, btn, box){
   btn.disabled = true;
   box.innerHTML = `<div class="ai-route loading">AI에게 경로를 물어보는 중...</div>`;
 
+  const day = currentDay();
+  const ctx = await dayContext(day && day.iso);
   const payload = {
     type: 'route',
     city: '삿포로',
     from: { name: from.name, place: from.place||'', lat: from.lat, lng: from.lng },
     to:   { name: to.name,   place: to.place||'',   lat: to.lat,   lng: to.lng },
-    time: from.time || ''
+    time: from.time || '',
+    date: ctx.date, weekday: ctx.weekday, dayType: ctx.dayType
   };
 
   try{
@@ -1449,7 +1576,10 @@ async function askAiRoute(from, to, btn, box){
       data = j.route || j;
     } else {
       const sys = '너는 일본 홋카이도 삿포로 지역의 대중교통에 밝은 안내자야. 출발지에서 목적지까지 지하철·버스·전차를 이용한 경로를 알려줘. 반드시 JSON 객체만 출력하고 다른 텍스트는 쓰지마. 형식: {"summary":"한 줄 요약","minutes":숫자,"fare":"예상 요금(엔)","steps":[{"mode":"도보|지하철|버스|전차","line":"노선명 또는 번호(도보면 빈 문자열)","from":"출발 지점","to":"도착 지점","note":"참고 사항"}],"caution":"주의할 점"}';
-      const usr = `출발: ${from.name}${from.place? ' ('+from.place+')':''}\n도착: ${to.name}${to.place? ' ('+to.place+')':''}\n대략 ${from.time||'낮'} 무렵 이동합니다.\n삿포로 시내 기준으로 실제 존재하는 노선명과 역 이름을 사용해줘.`;
+      const usr = `출발: ${from.name}${from.place? ' ('+from.place+')':''}\n도착: ${to.name}${to.place? ' ('+to.place+')':''}\n`
+        + `날짜: ${ctx.date} ${ctx.weekday}요일 (${ctx.dayType})\n출발 시각: ${from.time||'낮'}\n\n`
+        + `해당 요일·공휴일 운행 시간표를 감안해서 소요시간을 잡아줘. 주말·공휴일은 배차 간격이 길어지는 점도 반영해줘.\n`
+        + `삿포로 시내 기준으로 실제 존재하는 노선명과 역 이름을 사용해줘.`;
       const res = await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+personalKey()},
@@ -1507,6 +1637,43 @@ function renderAiRoute(d){
 /* =========================================================
    일정표 — 구간 카드
    ========================================================= */
+/* 하루 요약 — 확정/선택 개수와 이동시간 합계 */
+function renderDaySummary(day, el){
+  const all = day.stops;
+  const optCount = all.filter(s=>s.opt).length;
+  const fixCount = all.length - optCount;
+
+  const calc = (stops)=>{
+    let total=0;
+    const withLoc = stops.filter(s=>!s.tbd && s.lat!=null);
+    for(let i=0;i<withLoc.length-1;i++){
+      total += estimateMinutes(haversineKm(withLoc[i], withLoc[i+1]), normalizeMode(withLoc[i].mode));
+    }
+    return total;
+  };
+  const tAll = calc(all);
+  const tFix = calc(all.filter(s=>!s.opt));
+
+  el.innerHTML = `
+    <div class="ds-left">
+      <span class="ds-chip fix">확정 ${fixCount}</span>
+      ${optCount? `<span class="ds-chip opt">선택 ${optCount}</span>`:''}
+      <span class="ds-move">이동 약 ${fmtMin(showOptional? tAll : tFix)}</span>
+      ${optCount && showOptional && tAll!==tFix? `<span class="ds-sub">선택 빼면 ${fmtMin(tFix)}</span>`:''}
+    </div>
+    ${optCount? `<button type="button" class="ds-toggle ${showOptional?'':'off'}" id="optToggle">
+        ${showOptional? '선택 포함' : '선택 제외'}
+      </button>`:''}`;
+
+  const tg = document.getElementById('optToggle');
+  if(tg) tg.addEventListener('click', ()=>{
+    setShowOptional(!showOptional);
+    activeStopId=null;
+    renderScheduleScreen(); refreshAll();
+    toast(showOptional? '선택 일정을 포함해서 보여요' : '확정 일정만 보여요');
+  });
+}
+
 function buildLeg(from,to){
   const leg=document.createElement('div'); leg.className='leg';
   const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
@@ -1525,12 +1692,16 @@ function buildLeg(from,to){
   else if(HAS_DIR) meta=`직선거리 약 ${km.toFixed(1)}km · 경로를 불러오는 중입니다`;
   else meta=`직선거리 약 ${km.toFixed(1)}km · <span class="off">경로 안내 ${DISABLED_MSG}</span> 거리 기반 추정치이며 노선·요금 정보는 표시되지 않아요`;
 
-  leg.innerHTML=`<div class="rail"><span></span></div>
+  leg.innerHTML=`<div class="rail"><span></span><button type="button" class="leg-add" title="여기에 일정 추가">+</button><span></span></div>
     <div class="legbody">
       <div class="modes">${modesHtml}</div>
       <div class="route-detail"></div>
       <div class="legmeta">${meta}</div>
     </div>`;
+
+  leg.querySelector('.leg-add').addEventListener('click', ()=>{
+    openForm(null, { time: midTime(from.time, to.time), afterName: from.name, beforeName: to.name });
+  });
 
   leg.querySelectorAll('.mode').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1704,6 +1875,149 @@ setInterval(()=>{
   if(onSched) renderScheduleScreen();
   if(onMap) renderMapForDay();
 }, 60000);
+
+/* =========================================================
+   항공편 — 입국·출국 공항 일정 자동 생성
+   ========================================================= */
+const FLIGHT_RULE = {
+  arriveBuffer: 60,    // 착륙 후 입국심사·수하물 수취 예상 시간(분)
+  checkinLead: 180     // 국제선 출발 몇 분 전에 공항 도착 권장
+};
+
+function addMinutes(hhmm, min){
+  const m=/^(\d{1,2}):(\d{2})$/.exec(hhmm||'');
+  if(!m) return hhmm||'';
+  let t=(+m[1])*60+(+m[2])+min;
+  t=((t%1440)+1440)%1440;
+  return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
+
+/* 항공편 정보로 첫날/마지막날 공항 일정을 맞춥니다 */
+function ensureFlightStops(){
+  const f = TRIP.flights;
+  if(!f) return false;
+  let changed=false;
+
+  const upsert = (day, kind, data)=>{
+    if(!day) return;
+    let st = day.stops.find(x=>x.flight===kind);
+    if(!st){
+      st = { id:newUid(), flight:kind, cat:'이동', mode:'transit' };
+      day.stops.push(st);
+      changed=true;
+    }
+    if(st.time!==data.time || st.name!==data.name || st.note!==data.note
+       || st.lat!==data.lat || st.lng!==data.lng){
+      Object.assign(st, data, { tbd: data.lat==null });
+      changed=true;
+    }
+  };
+
+  const first = TRIP.days[0];
+  const last  = TRIP.days[TRIP.days.length-1];
+
+  if(f.in && f.in.time && first){
+    const ready = addMinutes(f.in.time, FLIGHT_RULE.arriveBuffer);
+    upsert(first, 'in', {
+      time: ready,
+      name: `${f.in.airport||'공항'} 도착`,
+      note: `${f.in.no? f.in.no+' ':''}${f.in.time} 착륙 · 입국심사와 수하물 수취까지 약 ${FLIGHT_RULE.arriveBuffer}분`,
+      place: f.in.place||'', lat: f.in.lat!=null? f.in.lat:null, lng: f.in.lng!=null? f.in.lng:null
+    });
+  }
+
+  if(f.out && f.out.time && last){
+    const beAt = addMinutes(f.out.time, -FLIGHT_RULE.checkinLead);
+    upsert(last, 'out', {
+      time: beAt,
+      name: `${f.out.airport||'공항'} 도착 (체크인)`,
+      note: `${f.out.no? f.out.no+' ':''}${f.out.time} 출발 · 출발 ${Math.round(FLIGHT_RULE.checkinLead/60)}시간 전 도착 권장`,
+      place: f.out.place||'', lat: f.out.lat!=null? f.out.lat:null, lng: f.out.lng!=null? f.out.lng:null
+    });
+  }
+
+  TRIP.days.forEach(d=> d.stops.sort((a,b)=>a.time.localeCompare(b.time)));
+  if(changed) markChanged();
+  return changed;
+}
+
+function openFlightForm(){
+  closeForm(); dayFormOpen=true;
+  const f = TRIP.flights || {};
+  const fin = f.in||{}, fout = f.out||{};
+  document.getElementById('formArea').innerHTML=`
+    <div class="form-card">
+      <h3>항공편</h3>
+      <p class="hint" style="margin:0 0 14px;">도착·출발 시각을 넣으면 첫날과 마지막 날 공항 일정이 자동으로 만들어져요.</p>
+
+      <div class="fl-sec">입국 (도착편)</div>
+      <label class="first">편명</label>
+      <input type="text" id="fi_no" value="${esc(fin.no||'')}" placeholder="예: LJ231">
+      <label>도착 공항</label>
+      <input type="text" id="fi_ap" value="${esc(fin.airport||'신치토세 공항')}" placeholder="신치토세 공항">
+      <label>착륙 시각</label>
+      <input type="time" id="fi_time" value="${esc(fin.time||'')}">
+
+      <div class="fl-sec" style="margin-top:18px;">출국 (귀국편)</div>
+      <label class="first">편명</label>
+      <input type="text" id="fo_no" value="${esc(fout.no||'')}" placeholder="예: LJ232">
+      <label>출발 공항</label>
+      <input type="text" id="fo_ap" value="${esc(fout.airport||'신치토세 공항')}" placeholder="신치토세 공항">
+      <label>출발 시각</label>
+      <input type="time" id="fo_time" value="${esc(fout.time||'')}">
+
+      <p class="hint">입국은 착륙 후 <b>${FLIGHT_RULE.arriveBuffer}분</b>(입국심사·수하물),
+        출국은 출발 <b>${Math.round(FLIGHT_RULE.checkinLead/60)}시간</b> 전 공항 도착으로 잡습니다.</p>
+
+      <div class="form-actions">
+        <button class="btn-primary" id="fl_save">저장</button>
+        <button class="btn-ghost" id="fl_cancel">취소</button>
+        ${f.in||f.out? '<button class="btn-ghost btn-danger" id="fl_clear">항공편 삭제</button>':''}
+      </div>
+    </div>`;
+
+  document.getElementById('fl_save').addEventListener('click', saveFlights);
+  document.getElementById('fl_cancel').addEventListener('click', ()=> closeDayForm());
+  const c=document.getElementById('fl_clear');
+  if(c) c.addEventListener('click', clearFlights);
+  document.getElementById('formArea').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+async function saveFlights(){
+  const v=id=>document.getElementById(id).value.trim();
+  const inTime=v('fi_time'), outTime=v('fo_time');
+  if(!inTime && !outTime){ alert('도착 또는 출발 시각을 하나 이상 입력해주세요.'); return; }
+
+  const prev = TRIP.flights || {};
+  const mk = async (no, ap, time, old)=>{
+    if(!time) return null;
+    const o = { no, airport:ap, time };
+    if(old && old.airport===ap && old.lat!=null){ o.lat=old.lat; o.lng=old.lng; o.place=old.place; }
+    else if(ap){
+      const at = await resolveStation(ap);          // 공항 좌표 찾기
+      if(at){ o.lat=at[0]; o.lng=at[1]; o.place=ap; }
+    }
+    return o;
+  };
+
+  TRIP.flights = {
+    in:  await mk(v('fi_no'), v('fi_ap'), inTime,  prev.in),
+    out: await mk(v('fo_no'), v('fo_ap'), outTime, prev.out)
+  };
+  ensureFlightStops(); markChanged();
+  closeDayForm(); activeStopId=null;
+  refreshAll(); renderScheduleScreen();
+  toast('항공편을 저장했어요');
+}
+
+function clearFlights(){
+  if(!confirm('항공편 정보를 지울까요? 자동으로 만들어진 공항 일정도 사라져요.')) return;
+  TRIP.flights = null;
+  TRIP.days.forEach(d=>{ d.stops = d.stops.filter(x=>!x.flight); });
+  markChanged(); closeDayForm(); activeStopId=null;
+  refreshAll(); renderScheduleScreen();
+  toast('항공편 정보를 지웠어요');
+}
 
 /* =========================================================
    숙소 — 첫날을 제외한 모든 날의 시작을 숙소로
@@ -1925,19 +2239,28 @@ function deleteDay(day){
 }
 
 /* ================= STOP FORM ================= */
-function openForm(stopId){
+function openForm(stopId, prefill){
   closeDayForm();
   editingStopId=stopId||null; geoPicked=null;
   const day=currentDay();
   if(!day){ toast('먼저 날짜를 추가해주세요'); return; }
   const ed = stopId? day.stops.find(x=>x.id===stopId):null;
+  const pf = prefill || {};
+  const isOpt = ed ? !!ed.opt : false;
   document.getElementById('formArea').innerHTML=`
     <div class="form-card">
       <h3>${ed? '일정 수정':'일정 추가'}</h3>
+      ${pf.afterName? `<p class="hint" style="margin:-6px 0 14px;"><b>${esc(pf.afterName)}</b> 다음, <b>${esc(pf.beforeName)}</b> 앞에 들어갑니다.</p>`:''}
       <label class="first">이름</label>
       <input type="text" id="f_name" value="${ed? esc(ed.name):''}" placeholder="장소 이름">
       <label>시간</label>
-      <input type="time" id="f_time" value="${ed? ed.time:''}">
+      <input type="time" id="f_time" value="${ed? ed.time : (pf.time||'')}">
+      <label>상태</label>
+      <div class="seg-toggle" id="f_optWrap">
+        <button type="button" class="seg ${isOpt?'':'on'}" data-opt="0">확정</button>
+        <button type="button" class="seg ${isOpt?'on':''}" data-opt="1">선택</button>
+      </div>
+      <p class="hint">'선택'은 갈지 말지 정하지 않은 후보예요. 일정표에서 선택 일정을 빼고 동선과 시간을 볼 수 있어요.</p>
       <label>카테고리</label>
       <select id="f_cat">${Object.keys(CATS).map(c=>`<option value="${c}" ${ed&&ed.cat===c?'selected':''}>${c}</option>`).join('')}</select>
       <label>메모</label>
@@ -1959,6 +2282,12 @@ function openForm(stopId){
     </div>`;
   if(ed && !ed.tbd) geoPicked={lat:ed.lat,lng:ed.lng,label:ed.place||ed.name};
   miniMap=null; miniMarker=null; acToken=null; clearTimeout(searchTimer);
+  document.querySelectorAll('#f_optWrap .seg').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#f_optWrap .seg').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+    });
+  });
   document.getElementById('f_geoSearch').addEventListener('click', ()=> doGeoSearch(false));
   document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
   document.getElementById('f_geoQuery').addEventListener('input', onGeoInput);
@@ -2195,12 +2524,16 @@ function saveForm(){
   const note=document.getElementById('f_note').value.trim();
   if(!name||!time){ alert('이름과 시간은 꼭 입력해주세요.'); return; }
   const day=currentDay();
+  const optSel = document.querySelector('#f_optWrap .seg.on');
+  const isOpt = !!(optSel && optSel.dataset.opt==='1');
   if(editingStopId){
     const s=day.stops.find(x=>x.id===editingStopId);
     s.name=name; s.time=time; s.cat=cat; s.note=note;
+    if(isOpt) s.opt=true; else delete s.opt;
     if(geoPicked){ s.lat=geoPicked.lat; s.lng=geoPicked.lng; s.place=shortPlace(geoPicked.label); s.tbd=false; }
   } else {
     const ns={id:newUid(),time,name,note,cat,mode:'walk'};
+    if(isOpt) ns.opt=true;
     if(geoPicked){ ns.lat=geoPicked.lat; ns.lng=geoPicked.lng; ns.place=shortPlace(geoPicked.label); ns.tbd=false; }
     else ns.tbd=true;
     day.stops.push(ns);
@@ -2273,6 +2606,7 @@ document.getElementById('addStopBtn').addEventListener('click', ()=> openForm(nu
 document.getElementById('addDayBtn').addEventListener('click', ()=> openDayForm('add'));
 document.getElementById('editDayBtn').addEventListener('click', ()=> openDayForm('edit'));
 document.getElementById('stayBtn').addEventListener('click', openStayForm);
+document.getElementById('flightBtn').addEventListener('click', openFlightForm);
 document.getElementById('carousel').addEventListener('scroll', onCarouselScroll, {passive:true});
 window.addEventListener('resize', setCarouselMetrics);
 document.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> document.getElementById(b.dataset.close).classList.remove('open')));
@@ -2504,6 +2838,7 @@ async function init(){
   // 예전 버전 데이터 호환: 지하철/버스 → 대중교통
   TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
   sortDays();
+  ensureFlightStops();
   ensureStayStarts();
   activeDayId = TRIP.days.length? TRIP.days[0].id : null;
   setSyncLabel(HAS_SYNC? '동기화 중...' : '내 기기 저장');
