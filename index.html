@@ -170,6 +170,39 @@
   .rd-eta{ font-size:10.5px; font-weight:700; color:var(--muted); background:var(--tint);
     border-radius:999px; padding:2px 8px; margin-left:5px; }
   .rd-eta.soon{ color:var(--red); background:var(--red-soft); }
+  .rd-dur{ font-family:var(--font-mono); font-weight:600; color:var(--ink); }
+  .rd-dist{ font-family:var(--font-mono); color:var(--muted); }
+  .rd-fare.muted{ color:var(--muted-2); background:transparent; padding:0; font-family:inherit; font-weight:500; }
+  .rd-sep{ color:var(--muted-2); }
+  .rd-none{ font-size:12px; color:var(--muted); background:var(--tint); border-radius:var(--r-sm);
+    padding:10px 12px; line-height:1.55; }
+  .rd-seg.line{ color:#fff; border-color:transparent; background:var(--red); }
+
+  /* 단계별 안내 */
+  .rd-steps{ list-style:none; margin:10px 0 0; padding:0 0 0 2px; border-left:2px solid var(--line);
+    display:flex; flex-direction:column; gap:10px; }
+  .rs{ padding-left:12px; position:relative; }
+  .rs-line{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:13px; }
+  .rs-line b{ font-weight:700; }
+  .rd-dot-color{ width:9px;height:9px;border-radius:50%; display:inline-block; }
+  .rs-kind{ font-size:10.5px; color:var(--muted); background:var(--tint); border-radius:999px; padding:2px 7px; }
+  .rs-head{ font-size:11px; color:var(--muted); }
+  .rs-body{ font-size:12px; color:var(--muted); margin-top:3px; line-height:1.5;
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .rs-body .icon{ width:12px;height:12px; }
+  .rs-arrow{ color:var(--muted-2); }
+  .rs-time{ font-family:var(--font-mono); font-size:11.5px; color:var(--red); font-weight:600; margin-top:3px; }
+  .rs.walk .rs-body{ color:var(--muted-2); }
+
+  /* 지도 범례 */
+  .map-legend{ position:absolute; left:12px; bottom:158px; z-index:500;
+    background:#fff; border-radius:999px; padding:7px 12px; display:flex; gap:11px;
+    box-shadow:var(--shadow-card); font-size:10.5px; font-weight:600; color:var(--muted); }
+  .map-legend span{ display:flex; align-items:center; gap:5px; }
+  .lg-line{ width:14px; height:3px; border-radius:2px; display:block; }
+  .lg-line.walk{ background:repeating-linear-gradient(90deg,#8E8E96 0 3px,transparent 3px 6px); }
+  .lg-line.transit{ background:#E03B4B; }
+  .lg-line.drive{ background:#2F6BD8; }
   .rd-dot{ color:var(--muted-2); }
   .rd-chain{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px; }
   .rd-seg{ display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600;
@@ -196,6 +229,9 @@
   .geo-result{ text-align:left; border:1px solid var(--line-2); background:#fff; border-radius:var(--r-sm);
     padding:10px 11px; font-size:12px; cursor:pointer; line-height:1.45; }
   .geo-result.picked{ border-color:var(--red); background:var(--red-soft); }
+  .geo-result b{ font-weight:700; }
+  .geo-sub{ color:var(--muted); font-size:11px; }
+  .mini-map{ height:230px; border-radius:var(--r-sm); overflow:hidden; margin-top:8px; border:1px solid var(--line-2); }
   .form-actions{ display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
   .btn-primary{ flex:1; min-width:120px; border:none; background:var(--ink); color:#fff; padding:13px;
     border-radius:var(--r-sm); font-weight:700; font-size:13.5px; cursor:pointer; }
@@ -314,6 +350,12 @@
     </div>
 
     <button class="ai-fab" id="aiFab"><span class="icon" id="aiFabIcon"></span> AI 추천</button>
+
+    <div class="map-legend" id="mapLegend">
+      <span><i class="lg-line walk"></i>도보</span>
+      <span><i class="lg-line transit"></i>대중교통</span>
+      <span><i class="lg-line drive"></i>차량</span>
+    </div>
 
     <div class="carousel-wrap">
       <div class="carousel" id="carousel"></div>
@@ -518,7 +560,6 @@ let activeDayId=null, activeStopId=null, editingStopId=null, geoPicked=null, day
 let engine='leaflet';
 let lmap, lMarkers=[], lLine, gmap, gMarkers=[], gLine, dirService;
 let scrollTimer=null, suppressScrollSync=false, syncTimer=null, pushTimer=null;
-const dirCache = {};
 
 function dayById(id){ return TRIP.days.find(d=>d.id===id); }
 function currentDay(){ return dayById(activeDayId) || TRIP.days[0]; }
@@ -642,11 +683,90 @@ function pinHtml(num, active){
     border:2.5px solid #fff;box-shadow:0 3px 9px rgba(0,0,0,.32);">
     <span style="transform:rotate(45deg);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:${active?13:11}px;font-weight:600;">${num}</span></div>`;
 }
+let lRoutes=[], gRoutes=[], routeToken=0;
 function clearMapLayers(){
   lMarkers.forEach(m=>lmap.removeLayer(m)); lMarkers=[];
   if(lLine){ lmap.removeLayer(lLine); lLine=null; }
+  lRoutes.forEach(l=>lmap.removeLayer(l)); lRoutes=[];
   gMarkers.forEach(m=>m.setMap(null)); gMarkers=[];
   if(gLine){ gLine.setMap(null); gLine=null; }
+  gRoutes.forEach(l=>l.setMap(null)); gRoutes=[];
+}
+
+/* 이동수단별 선 스타일 */
+const ROUTE_STYLE = {
+  walk:  { color:'#8E8E96', weight:4, dash:'2 7' },
+  drive: { color:'#2F6BD8', weight:5, dash:null },
+  transit:{ color:'#E03B4B', weight:6, dash:null }
+};
+
+function drawPath(path, style){
+  if(!path || path.length<2) return;
+  if(engine==='leaflet'){
+    const opts={ color:style.color, weight:style.weight, opacity:.9, lineCap:'round', lineJoin:'round' };
+    if(style.dash) opts.dashArray=style.dash;
+    lRoutes.push(L.polyline(path, opts).addTo(lmap));
+  } else {
+    const opts={
+      path: path.map(p=>({lat:p[0], lng:p[1]})),
+      strokeColor: style.color,
+      strokeWeight: style.weight,
+      strokeOpacity: style.dash? 0 : .9,
+      map: gmap
+    };
+    if(style.dash){
+      opts.icons=[{ icon:{ path:google.maps.SymbolPath.CIRCLE, scale:2.4, fillOpacity:1,
+        fillColor:style.color, strokeOpacity:0 }, offset:'0', repeat:'12px' }];
+    }
+    gRoutes.push(new google.maps.Polyline(opts));
+  }
+}
+
+function drawStationDot(lat,lng,color,title){
+  if(engine==='leaflet'){
+    lRoutes.push(L.circleMarker([lat,lng], {
+      radius:5, color:'#fff', weight:2, fillColor:color||'#1A1A1E', fillOpacity:1
+    }).addTo(lmap).bindTooltip(title||'', {direction:'top'}));
+  } else {
+    gRoutes.push(new google.maps.Marker({
+      position:{lat,lng}, map:gmap, title:title||'',
+      icon:{ path:google.maps.SymbolPath.CIRCLE, scale:5, fillColor:color||'#1A1A1E',
+        fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+    }));
+  }
+}
+
+/* 선택한 이동수단대로 실제 경로를 그립니다 */
+async function drawRoutesForDay(){
+  if(!HAS_DIR || !dirService) return;
+  const token = ++routeToken;
+  const day = currentDay(); if(!day) return;
+  const pts = day.stops.filter(s=>!s.tbd && s.lat!=null);
+
+  for(let i=0;i<pts.length-1;i++){
+    const from=pts[i], to=pts[i+1];
+    const mode=normalizeMode(from.mode);
+    const r = await requestRoute(from,to,modeToG(mode));
+    if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
+    if(!r || !r.ok) continue;
+
+    if(mode==='transit' && r.steps.length){
+      r.steps.forEach(st=>{
+        if(st.kind==='transit'){
+          drawPath(st.path, { color: st.color || ROUTE_STYLE.transit.color, weight:6, dash:null });
+          const a=st.path[0], b=st.path[st.path.length-1];
+          if(a) drawStationDot(a[0],a[1], st.color||ROUTE_STYLE.transit.color, `${st.from} · ${st.name} 승차`);
+          if(b) drawStationDot(b[0],b[1], st.color||ROUTE_STYLE.transit.color, `${st.to} · ${st.name} 하차`);
+        } else {
+          drawPath(st.path, ROUTE_STYLE.walk);
+        }
+      });
+    } else if(mode==='walk'){
+      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.walk);
+    } else {
+      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.drive);
+    }
+  }
 }
 function renderMapForDay(){
   const day=currentDay(); clearMapLayers();
@@ -661,7 +781,7 @@ function renderMapForDay(){
       mk.on('click', ()=> selectStop(s.id,true,true));
       lMarkers.push(mk); pts.push([s.lat,s.lng]);
     });
-    lLine=L.polyline(pts,{color:'#1A1A1E',weight:2,opacity:.4,dashArray:'1 7'}).addTo(lmap);
+    if(!HAS_DIR) lLine=L.polyline(pts,{color:'#1A1A1E',weight:2,opacity:.4,dashArray:'1 7'}).addTo(lmap);
     if(!activeStopId) lmap.fitBounds(L.latLngBounds(pts),{padding:[46,46],maxZoom:13});
   } else {
     const pts=[];
@@ -676,9 +796,10 @@ function renderMapForDay(){
       mk.addListener('click', ()=> selectStop(s.id,true,true));
       gMarkers.push(mk); pts.push({lat:s.lat,lng:s.lng});
     });
-    gLine=new google.maps.Polyline({path:pts,map:gmap,strokeColor:'#1A1A1E',strokeOpacity:.45,strokeWeight:2});
+    if(!HAS_DIR) gLine=new google.maps.Polyline({path:pts,map:gmap,strokeColor:'#1A1A1E',strokeOpacity:.45,strokeWeight:2});
     if(!activeStopId){ const b=new google.maps.LatLngBounds(); pts.forEach(p=>b.extend(p)); gmap.fitBounds(b,60); }
   }
+  drawRoutesForDay();
 }
 function panTo(lat,lng,zoom){
   if(engine==='leaflet') lmap.setView([lat,lng],zoom||14,{animate:true});
@@ -700,7 +821,7 @@ function bootGoogleMaps(){
     }catch(e){ console.error(e); }
   };
   const sc=document.createElement('script');
-  sc.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.GOOGLE_MAPS_API_KEY)}&callback=__gmapReady&language=ko&region=JP`;
+  sc.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.GOOGLE_MAPS_API_KEY)}&callback=__gmapReady&libraries=places&language=ko&region=JP`;
   sc.async=true;
   sc.onerror=()=> console.warn('구글 지도를 불러오지 못해 기본 지도를 사용합니다.');
   document.head.appendChild(sc);
@@ -828,6 +949,73 @@ function renderScheduleScreen(){
   });
 }
 
+/* =========================================================
+   경로 조회 (공통) — 지도와 일정표가 같은 결과를 씁니다
+   ========================================================= */
+const routeCache = {};
+function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }  // 1분 단위 갱신
+
+function modeToG(mode){ const m=MODES.find(x=>x.key===normalizeMode(mode)); return m? m.g : 'WALKING'; }
+
+function requestRoute(from, to, g){
+  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${g}|${g==='TRANSIT'? timeBucket():'s'}`;
+  if(routeCache[key]) return routeCache[key];
+
+  const p = new Promise(resolve=>{
+    if(!dirService) return resolve(null);
+    const req = {
+      origin:{lat:from.lat,lng:from.lng},
+      destination:{lat:to.lat,lng:to.lng},
+      travelMode: google.maps.TravelMode[g]
+    };
+    if(g==='TRANSIT') req.transitOptions = { departureTime: new Date() };
+    dirService.route(req, (res, status)=>{
+      if(status!=='OK' || !res.routes[0] || !res.routes[0].legs[0]) return resolve({ ok:false, status });
+      const route=res.routes[0], lg=route.legs[0];
+      resolve({
+        ok:true,
+        mins: Math.round(lg.duration.value/60),
+        distance: lg.distance? lg.distance.text : null,
+        fare: route.fare? route.fare.text : null,
+        depart: lg.departure_time? lg.departure_time.text : null,
+        departAt: lg.departure_time && lg.departure_time.value ? lg.departure_time.value.getTime() : null,
+        arrive: lg.arrival_time? lg.arrival_time.text : null,
+        overview: (route.overview_path||[]).map(pt=>[pt.lat(), pt.lng()]),
+        steps: (lg.steps||[]).map(st=>{
+          const path = (st.path||[]).map(pt=>[pt.lat(), pt.lng()]);
+          const mins = Math.round((st.duration? st.duration.value:0)/60);
+          if(st.travel_mode==='TRANSIT' && st.transit){
+            const t=st.transit, line=t.line||{};
+            return {
+              kind:'transit', path, mins,
+              name: line.short_name || line.name || '노선',
+              full: line.name || '',
+              vehicle: (line.vehicle && (line.vehicle.type || line.vehicle.name)) || '',
+              color: line.color || null,
+              textColor: line.text_color || null,
+              from: (t.departure_stop||{}).name || '',
+              to: (t.arrival_stop||{}).name || '',
+              depart: t.departure_time? t.departure_time.text : null,
+              departAt: t.departure_time && t.departure_time.value ? t.departure_time.value.getTime() : null,
+              arrive: t.arrival_time? t.arrival_time.text : null,
+              stops: t.num_stops || 0,
+              headsign: t.headsign || ''
+            };
+          }
+          return { kind: st.travel_mode==='WALKING' ? 'walk' : 'drive', path, mins,
+                   dist: st.distance? st.distance.text : '' };
+        })
+      });
+    });
+  });
+
+  routeCache[key] = p;
+  return p;
+}
+
+/* =========================================================
+   일정표 — 구간 카드
+   ========================================================= */
 function buildLeg(from,to){
   const leg=document.createElement('div'); leg.className='leg';
   const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
@@ -843,42 +1031,130 @@ function buildLeg(from,to){
 
   let meta;
   if(!both) meta='양쪽 위치가 모두 정해지면 소요시간이 계산돼요';
-  else if(HAS_DIR) meta=`직선거리 약 ${km.toFixed(1)}km · 실제 경로를 불러오는 중입니다`;
+  else if(HAS_DIR) meta=`직선거리 약 ${km.toFixed(1)}km · 경로를 불러오는 중입니다`;
   else meta=`직선거리 약 ${km.toFixed(1)}km · <span class="off">경로 안내 ${DISABLED_MSG}</span> 거리 기반 추정치이며 노선·요금 정보는 표시되지 않아요`;
 
   leg.innerHTML=`<div class="rail"><span></span></div>
     <div class="legbody">
       <div class="modes">${modesHtml}</div>
-      <div class="route-detail" id="rd-${from.id}"></div>
+      <div class="route-detail"></div>
       <div class="legmeta">${meta}</div>
     </div>`;
 
   leg.querySelectorAll('.mode').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ from.mode=btn.dataset.mode; markChanged(); renderScheduleScreen(); });
+    btn.addEventListener('click', ()=>{
+      from.mode=btn.dataset.mode; markChanged();
+      renderScheduleScreen();
+      renderMapForDay();           // 지도에도 바로 반영
+    });
   });
 
-  if(both && HAS_DIR) fetchDirectionsForLeg(from,to,leg,km);
+  if(both && HAS_DIR) fillLegDetail(from,to,leg,km);
   return leg;
 }
 
-/* 일정 날짜/시각을 실제 Date로 (예: 2026-09-19 + "14:00") */
-function stopDateTime(iso, hhmm){
-  if(!iso || !hhmm) return new Date();
-  const d = new Date(`${iso}T${hhmm}:00`);
-  return isNaN(d) ? new Date() : d;
+function vehicleIcon(type){
+  const t=String(type||'').toUpperCase();
+  if(t.includes('BUS')) return 'bus';
+  return 'metro';
+}
+function vehicleLabel(type){
+  const t=String(type||'').toUpperCase();
+  if(t.includes('BUS')) return '버스';
+  if(t.includes('SUBWAY')||t.includes('METRO')) return '지하철';
+  if(t.includes('TRAM')||t.includes('STREETCAR')) return '노면전차';
+  if(t.includes('RAIL')||t.includes('TRAIN')) return '열차';
+  return '대중교통';
 }
 
-function vehicleIcon(type){
-  const t = String(type||'').toUpperCase();
-  if(t.includes('SUBWAY') || t.includes('METRO')) return 'metro';
-  if(t.includes('BUS')) return 'bus';
-  if(t.includes('TRAM') || t.includes('RAIL') || t.includes('TRAIN')) return 'metro';
-  return 'metro';
+async function fillLegDetail(from,to,legEl,km){
+  const metaEl   = legEl.querySelector('.legmeta');
+  const detailEl = legEl.querySelector('.route-detail');
+  const cur      = normalizeMode(from.mode);
+
+  // 칩에 표시할 각 수단 소요시간
+  const gList=[...new Set(MODES.map(m=>m.g))];
+  const routes={};
+  await Promise.all(gList.map(async g=>{ routes[g] = await requestRoute(from,to,g); }));
+
+  let anyReal=false;
+  MODES.forEach(m=>{
+    const el=legEl.querySelector(`.mins[data-mins="${m.key}"]`);
+    if(!el) return;
+    const r=routes[m.g];
+    if(r && r.ok){ el.textContent=fmtMin(r.mins); anyReal=true; }
+  });
+
+  const r = routes[modeToG(cur)];
+
+  if(!r || !r.ok){
+    detailEl.innerHTML = cur==='transit'
+      ? `<div class="rd-none">대중교통 경로를 찾지 못했어요. 거리가 아주 가깝거나 운행 정보가 없는 구간일 수 있어요.</div>`
+      : '';
+    metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km`
+      + (anyReal? ' · 다른 수단은 구글 경로 기준' : ' · 경로를 찾지 못해 추정치로 표시됩니다');
+    return;
+  }
+
+  // ---- 요약 줄 ----
+  const bits=[];
+  if(r.depart && r.arrive) bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
+  bits.push(`<span class="rd-dur">${fmtMin(r.mins)}</span>`);
+  if(r.fare) bits.push(`<span class="rd-fare">${esc(r.fare)}</span>`);
+  else if(cur==='transit') bits.push(`<span class="rd-fare muted">요금 정보 없음</span>`);
+  if(r.distance && cur!=='transit') bits.push(`<span class="rd-dist">${esc(r.distance)}</span>`);
+
+  // ---- 노선 배지 ----
+  let chain='';
+  const transitSteps = (r.steps||[]).filter(st=>st.kind==='transit');
+  if(cur==='transit' && r.steps.length){
+    const parts=r.steps.filter(st=> st.kind==='transit' || st.mins>=1).map(st=>{
+      if(st.kind!=='transit') return `<span class="rd-seg walk"><span class="icon">${iconSvg('walk')}</span>${st.mins}분</span>`;
+      const style = st.color? ` style="background:${esc(st.color)};border-color:${esc(st.color)};color:${esc(st.textColor||'#fff')}"`:'';
+      return `<span class="rd-seg line"${style}><span class="icon">${iconSvg(vehicleIcon(st.vehicle))}</span>${esc(st.name)}</span>`;
+    });
+    if(parts.length) chain=`<div class="rd-chain">${parts.join('<span class="rd-arrow">›</span>')}</div>`;
+  }
+
+  // ---- 탑승 카운트다운 ----
+  const first = transitSteps[0];
+  if(first && first.departAt){
+    bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>`
+      + `<span class="rd-eta" data-dep="${first.departAt}">${etaText(first.departAt)}</span>`);
+  }
+
+  // ---- 단계별 안내 ----
+  let stepsHtml='';
+  if(cur==='transit' && r.steps.length){
+    const lis = r.steps.map(st=>{
+      if(st.kind==='transit'){
+        const dot = st.color? `<i class="rd-dot-color" style="background:${esc(st.color)}"></i>` : '';
+        return `<li class="rs transit">
+          <div class="rs-line">${dot}<b>${esc(st.name)}</b>
+            <span class="rs-kind">${vehicleLabel(st.vehicle)}</span>
+            ${st.headsign? `<span class="rs-head">${esc(st.headsign)} 방면</span>`:''}</div>
+          <div class="rs-body">${esc(st.from)} <span class="rs-arrow">→</span> ${esc(st.to)}
+            ${st.stops? ` · ${st.stops}정거장`:''} · ${fmtMin(st.mins||1)}</div>
+          ${st.depart? `<div class="rs-time">${esc(st.depart)} 출발${st.arrive? ` · ${esc(st.arrive)} 도착`:''}</div>`:''}
+        </li>`;
+      }
+      if(st.mins < 1) return '';
+      return `<li class="rs walk"><div class="rs-body"><span class="icon">${iconSvg('walk')}</span> 도보 ${fmtMin(st.mins)}${st.dist? ` · ${esc(st.dist)}`:''}</div></li>`;
+    }).join('');
+    if(lis) stepsHtml = `<ol class="rd-steps">${lis}</ol>`;
+  }
+
+  detailEl.innerHTML =
+    `<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>${chain}${stepsHtml}`;
+  tickEtas();
+
+  metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준`
+    + (cur==='transit' ? ' · 지금 출발 기준이며 1분마다 갱신돼요' : '');
 }
 
 /* 출발까지 남은 시간 (실시간 갱신) */
 function etaText(epoch){
-  const diff = Math.round((epoch - Date.now())/60000);
+  const diff=Math.round((epoch-Date.now())/60000);
   if(diff <= -2) return '출발함';
   if(diff <= 0)  return '곧 출발';
   if(diff < 60)  return `${diff}분 뒤`;
@@ -887,130 +1163,24 @@ function etaText(epoch){
 }
 function tickEtas(){
   document.querySelectorAll('.rd-eta').forEach(el=>{
-    const dep = Number(el.dataset.dep);
-    if(!dep) return;
-    el.textContent = etaText(dep);
-    el.classList.toggle('soon', dep - Date.now() < 5*60*1000);
+    const dep=Number(el.dataset.dep); if(!dep) return;
+    el.textContent=etaText(dep);
+    el.classList.toggle('soon', dep-Date.now() < 5*60*1000);
   });
 }
 setInterval(tickEtas, 20000);
 
-/* 일정표를 보고 있는 동안 1분마다 경로를 다시 불러옵니다 */
+/* 일정표를 보고 있는 동안 1분마다 경로 재조회 */
 setInterval(()=>{
-  if(!HAS_DIR) return;
-  if(document.hidden) return;
-  if(!document.getElementById('screen-schedule').classList.contains('active')) return;
+  if(!HAS_DIR || document.hidden) return;
   if(dayFormOpen || editingStopId!==null) return;
-  for(const k in dirCache) delete dirCache[k];
-  renderScheduleScreen();
+  const onSched = document.getElementById('screen-schedule').classList.contains('active');
+  const onMap   = document.getElementById('screen-map').classList.contains('active');
+  if(!onSched && !onMap) return;
+  for(const k in routeCache) delete routeCache[k];
+  if(onSched) renderScheduleScreen();
+  if(onMap) renderMapForDay();
 }, 60000);
-
-function fetchDirectionsForLeg(from,to,legEl,km){
-  if(!dirService) return;
-  const metaEl   = legEl.querySelector('.legmeta');
-  const detailEl = legEl.querySelector('.route-detail');
-  const dayIso   = (currentDay()||{}).iso;
-  const depart   = new Date();                 // 지금 시각 기준으로 조회
-  const bucket   = Math.floor(Date.now()/(60*1000));    // 1분마다 새로 조회
-
-  const needed=[...new Set(MODES.map(m=>m.g))];
-  let pending=needed.length; const results={};
-
-  needed.forEach(g=>{
-    const ck=`${from.lat},${from.lng}|${to.lat},${to.lng}|${g}|${g==='TRANSIT'? bucket : 'static'}`;
-    if(dirCache[ck]!==undefined){ results[g]=dirCache[ck]; if(--pending===0) apply(); return; }
-    const req={ origin:{lat:from.lat,lng:from.lng}, destination:{lat:to.lat,lng:to.lng}, travelMode:google.maps.TravelMode[g] };
-    if(g==='TRANSIT') req.transitOptions={ departureTime: depart };
-    dirService.route(req,(res,status)=>{
-      let out=null;
-      if(status==='OK' && res.routes[0] && res.routes[0].legs[0]){
-        const route=res.routes[0], lg=route.legs[0];
-        out = {
-          mins: Math.round(lg.duration.value/60),
-          fare: route.fare ? route.fare.text : null,
-          depart: lg.departure_time ? lg.departure_time.text : null,
-          departAt: lg.departure_time && lg.departure_time.value ? lg.departure_time.value.getTime() : null,
-          arrive: lg.arrival_time ? lg.arrival_time.text : null,
-          steps: (lg.steps||[]).map(st=>{
-            if(st.travel_mode==='TRANSIT' && st.transit){
-              const line=st.transit.line||{};
-              return {
-                kind:'transit',
-                name: line.short_name || line.name || '노선',
-                full: line.name || '',
-                vehicle: (line.vehicle && (line.vehicle.type || line.vehicle.name)) || '',
-                color: line.color || null,
-                from: (st.transit.departure_stop||{}).name || '',
-                to: (st.transit.arrival_stop||{}).name || '',
-                depart: st.transit.departure_time ? st.transit.departure_time.text : null,
-                departAt: st.transit.departure_time && st.transit.departure_time.value ? st.transit.departure_time.value.getTime() : null,
-                stops: st.transit.num_stops || 0
-              };
-            }
-            return { kind:'walk', mins: Math.round((st.duration? st.duration.value:0)/60) };
-          })
-        };
-      }
-      dirCache[ck]=out; results[g]=out;
-      if(--pending===0) apply();
-    });
-  });
-
-  function apply(){
-    let anyReal=false;
-    MODES.forEach(m=>{
-      const el=legEl.querySelector(`.mins[data-mins="${m.key}"]`);
-      if(!el) return;
-      const r=results[m.g];
-      if(r && r.mins!=null){ el.textContent=fmtMin(r.mins); anyReal=true; }
-    });
-
-    const cur = normalizeMode(from.mode);
-    const r = results[(MODES.find(m=>m.key===cur)||MODES[0]).g];
-
-    if(r){
-      const bits=[];
-      if(r.depart && r.arrive){
-        bits.push(`<span class="rd-time">${esc(r.depart)} – ${esc(r.arrive)}</span>`);
-      }
-      if(r.fare) bits.push(`<span class="rd-fare">${esc(r.fare)}</span>`);
-
-      let chain='';
-      if(cur==='transit' && r.steps && r.steps.length){
-        const parts = r.steps.filter(st=> st.kind==='transit' || st.mins>=1).map(st=>{
-          if(st.kind==='walk') return `<span class="rd-seg walk"><span class="icon">${iconSvg('walk')}</span>${st.mins}분</span>`;
-          const style = st.color ? ` style="border-color:${esc(st.color)};color:${esc(st.color)}"` : '';
-          return `<span class="rd-seg line"${style}><span class="icon">${iconSvg(vehicleIcon(st.vehicle))}</span>${esc(st.name)}</span>`;
-        });
-        if(parts.length) chain=`<div class="rd-chain">${parts.join('<span class="rd-arrow">›</span>')}</div>`;
-
-        const first = r.steps.find(st=>st.kind==='transit');
-        if(first && first.depart){
-          const eta = first.departAt
-            ? `<span class="rd-eta" data-dep="${first.departAt}">${etaText(first.departAt)}</span>` : '';
-          bits.push(`<span class="rd-board">${esc(first.depart)} ${esc(first.from)} 출발</span>${eta}`);
-        }
-      }
-
-      detailEl.innerHTML = (bits.length||chain)
-        ? `<div class="rd-head">${bits.join('<span class="rd-dot">·</span>')}</div>${chain}` : '';
-      tickEtas();
-    } else {
-      detailEl.innerHTML='';
-    }
-
-    if(!anyReal){
-      metaEl.innerHTML=`직선거리 약 ${km.toFixed(1)}km · 경로를 찾지 못해 추정치로 표시됩니다`;
-    } else {
-      const isTrip = dayIso === new Date().toISOString().slice(0,10);
-      metaEl.innerHTML = `직선거리 약 ${km.toFixed(1)}km · 구글 경로 기준`
-        + (normalizeMode(from.mode)==='transit'
-            ? (isTrip ? ' · <b>지금 출발</b> 기준 실시간 운행 정보'
-                      : ' · <b>지금 출발</b> 기준이라 여행 당일에는 시간표가 다를 수 있어요')
-            : '');
-    }
-  }
-}
 
 /* ================= DAY FORM ================= */
 function openDayForm(mode){
@@ -1091,7 +1261,9 @@ function openForm(stopId){
         <button class="geo-btn" id="f_geoSearch"><span class="icon">${iconSvg('search')}</span>검색</button>
       </div>
       <div class="geo-results" id="f_geoResults"></div>
-      <p class="hint" id="f_geoStatus">${ed&&!ed.tbd? '기존 위치가 저장되어 있어요. 다시 검색하면 위치가 바뀌어요.':'검색하지 않으면 위치 미정으로 저장돼요.'}</p>
+      <p class="hint" id="f_geoStatus">${ed&&!ed.tbd? '기존 위치가 저장되어 있어요. 다시 검색하면 위치가 바뀌어요.':'검색하지 않으면 위치 미정으로 저장돼요. 가게 이름은 일본어나 영어가 더 잘 찾아져요.'}</p>
+      <button type="button" class="link-btn" id="f_pickMap">지도에서 직접 찍기</button>
+      <div id="f_miniMap" class="mini-map" style="display:none;"></div>
       <div class="form-actions">
         <button class="btn-primary" id="f_save">${ed? '수정 저장':'일정에 추가'}</button>
         <button class="btn-ghost" id="f_cancel">취소</button>
@@ -1099,36 +1271,164 @@ function openForm(stopId){
       </div>
     </div>`;
   if(ed && !ed.tbd) geoPicked={lat:ed.lat,lng:ed.lng,label:ed.place||ed.name};
+  miniMap=null; miniMarker=null;
   document.getElementById('f_geoSearch').addEventListener('click', doGeoSearch);
+  document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
+  document.getElementById('f_geoQuery').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGeoSearch(); } });
   document.getElementById('f_save').addEventListener('click', saveForm);
   document.getElementById('f_cancel').addEventListener('click', closeForm);
   if(ed) document.getElementById('f_delete').addEventListener('click', ()=> deleteStop(stopId));
   document.getElementById('formArea').scrollIntoView({behavior:'smooth',block:'start'});
 }
-function closeForm(){ editingStopId=null; geoPicked=null; const a=document.getElementById('formArea'); if(a && !dayFormOpen) a.innerHTML=''; }
+function closeForm(){ editingStopId=null; geoPicked=null; miniMap=null; miniMarker=null; const a=document.getElementById('formArea'); if(a && !dayFormOpen) a.innerHTML=''; }
+
+/* ---------- 위치 검색 ----------
+   1순위: 구글 장소 검색 (키가 있을 때, 한국어 검색에 가장 강함)
+   2순위: OpenStreetMap Nominatim (홋카이도 주변으로 범위 지정)
+   3순위: Photon (오타·부분 일치에 관대함)
+   그래도 못 찾으면 지도에서 직접 찍기                              */
+
+const SAPPORO = { lat:43.0618, lng:141.3545 };
+let placesService = null;
+
+function ensurePlacesService(){
+  if(placesService) return placesService;
+  if(window.google && google.maps && google.maps.places){
+    placesService = new google.maps.places.PlacesService(gmap || document.createElement('div'));
+  }
+  return placesService;
+}
+
+function renderGeoResults(items, st, rs){
+  rs.innerHTML='';
+  if(!items.length) return false;
+  st.textContent='아래에서 위치를 선택하세요.';
+  items.forEach(it=>{
+    const b=document.createElement('button');
+    b.type='button'; b.className='geo-result';
+    b.innerHTML = `<b>${esc(it.title)}</b>${it.sub? `<br><span class="geo-sub">${esc(it.sub)}</span>`:''}`;
+    b.addEventListener('click', ()=>{
+      geoPicked={ lat:it.lat, lng:it.lng, label: it.sub? `${it.title}, ${it.sub}` : it.title };
+      document.querySelectorAll('.geo-result').forEach(x=>x.classList.remove('picked'));
+      b.classList.add('picked');
+      st.textContent='이 위치로 저장됩니다.';
+    });
+    rs.appendChild(b);
+  });
+  return true;
+}
+
+function searchGoogle(q){
+  return new Promise(resolve=>{
+    const svc = ensurePlacesService();
+    if(!svc) return resolve([]);
+    svc.textSearch({
+      query: q,
+      location: new google.maps.LatLng(SAPPORO.lat, SAPPORO.lng),
+      radius: 120000
+    }, (results, status)=>{
+      if(status !== google.maps.places.PlacesServiceStatus.OK || !results) return resolve([]);
+      resolve(results.slice(0,6).map(r=>({
+        title: r.name,
+        sub: r.formatted_address || '',
+        lat: r.geometry.location.lat(),
+        lng: r.geometry.location.lng()
+      })));
+    });
+  });
+}
+
+async function searchNominatim(q){
+  // 홋카이도 주변으로 우선순위를 주되, 벗어난 결과도 허용
+  const view = '139.0,46.0,146.5,41.0';
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6`
+    + `&accept-language=ko,ja,en&viewbox=${view}&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url);
+  if(!res.ok) return [];
+  const data = await res.json();
+  return data.map(r=>{
+    const parts = r.display_name.split(',').map(x=>x.trim());
+    return { title: parts[0], sub: parts.slice(1,4).join(', '), lat:parseFloat(r.lat), lng:parseFloat(r.lon) };
+  });
+}
+
+async function searchPhoton(q){
+  const url = `https://photon.komoot.io/api/?limit=6&lang=default`
+    + `&lat=${SAPPORO.lat}&lon=${SAPPORO.lng}&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url);
+  if(!res.ok) return [];
+  const data = await res.json();
+  return (data.features||[]).map(f=>{
+    const p=f.properties||{};
+    const sub=[p.street, p.district, p.city, p.state, p.country].filter(Boolean).join(', ');
+    return { title: p.name || p.street || '이름 없는 장소', sub, lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0] };
+  }).filter(x=>x.title);
+}
 
 async function doGeoSearch(){
   const q=document.getElementById('f_geoQuery').value.trim();
   const st=document.getElementById('f_geoStatus'), rs=document.getElementById('f_geoResults');
   if(!q){ st.textContent='검색어를 입력해주세요.'; return; }
   st.textContent='검색 중입니다.'; rs.innerHTML='';
+
+  const tried=[];
   try{
-    const res=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`,{headers:{'Accept-Language':'ko'}});
-    const data=await res.json();
-    if(!data.length){ st.textContent='검색 결과가 없어요. 다른 검색어로 시도해보세요.'; return; }
-    st.textContent='아래에서 위치를 선택하세요.';
-    data.forEach(r=>{
-      const b=document.createElement('button');
-      b.type='button'; b.className='geo-result'; b.textContent=r.display_name;
-      b.addEventListener('click', ()=>{
-        geoPicked={lat:parseFloat(r.lat),lng:parseFloat(r.lon),label:r.display_name};
-        document.querySelectorAll('.geo-result').forEach(x=>x.classList.remove('picked'));
-        b.classList.add('picked'); st.textContent='이 위치로 저장됩니다.';
-      });
-      rs.appendChild(b);
-    });
-  }catch(e){ st.textContent='검색 중 오류가 발생했어요. 네트워크 문제일 수 있어요.'; }
+    if(ensurePlacesService()){
+      tried.push('구글');
+      const g = await searchGoogle(q);
+      if(renderGeoResults(g, st, rs)) return;
+    }
+
+    tried.push('OpenStreetMap');
+    let list = await searchNominatim(q);
+    if(renderGeoResults(list, st, rs)) return;
+
+    tried.push('Photon');
+    list = await searchPhoton(q);
+    if(renderGeoResults(list, st, rs)) return;
+
+    st.innerHTML = `검색 결과가 없어요. 가게 이름은 <b>일본어나 영어</b>로 넣으면 더 잘 찾아요`
+      + ` (예: 라마이 → <b>RAMAI 札幌</b>). 아래 <b>지도에서 직접 찍기</b>로 위치를 정할 수도 있어요.`;
+  }catch(e){
+    st.innerHTML = `검색 중 오류가 발생했어요 (${esc(tried.join(', '))}). 잠시 후 다시 시도하거나 <b>지도에서 직접 찍기</b>를 이용해주세요.`;
+  }
 }
+
+/* ---------- 지도에서 직접 찍기 ---------- */
+let miniMap=null, miniMarker=null;
+function toggleMiniMap(){
+  const box=document.getElementById('f_miniMap');
+  const st=document.getElementById('f_geoStatus');
+  if(!box) return;
+  const opening = box.style.display==='none' || !box.style.display;
+  box.style.display = opening ? 'block' : 'none';
+  if(!opening) return;
+
+  const center = geoPicked ? [geoPicked.lat, geoPicked.lng] : [SAPPORO.lat, SAPPORO.lng];
+  if(!miniMap){
+    miniMap = L.map(box, { zoomControl:true, attributionControl:false }).setView(center, 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(miniMap);
+    miniMap.on('click', async e=>{
+      const {lat,lng}=e.latlng;
+      if(miniMarker) miniMap.removeLayer(miniMarker);
+      miniMarker = L.marker([lat,lng]).addTo(miniMap);
+      geoPicked = { lat, lng, label:'지도에서 선택한 위치' };
+      st.textContent = '이 위치로 저장됩니다. 주소를 확인하는 중...';
+      try{
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ko,ja,en&lat=${lat}&lon=${lng}`);
+        const d = await r.json();
+        if(d && d.display_name){
+          geoPicked.label = d.display_name;
+          st.textContent = '이 위치로 저장됩니다: ' + shortPlace(d.display_name);
+        } else { st.textContent = '이 위치로 저장됩니다.'; }
+      }catch(err){ st.textContent = '이 위치로 저장됩니다.'; }
+    });
+  } else {
+    miniMap.setView(center, 13);
+  }
+  setTimeout(()=>{ miniMap.invalidateSize(); }, 80);
+}
+
 function shortPlace(l){ return l? l.split(',').map(x=>x.trim()).slice(0,3).join(', '):''; }
 function saveForm(){
   const name=document.getElementById('f_name').value.trim();
@@ -1205,7 +1505,7 @@ function switchScreen(name){
     renderMapForDay(); renderCarousel();
     setTimeout(()=>{ if(engine==='leaflet') lmap.invalidateSize(); },60);
   }
-  if(name==='schedule'){ closeForm(); closeDayForm(); if(HAS_DIR){ for(const k in dirCache) delete dirCache[k]; } renderScheduleScreen(); }
+  if(name==='schedule'){ closeForm(); closeDayForm(); if(HAS_DIR){ for(const k in routeCache) delete routeCache[k]; } renderScheduleScreen(); }
   if(name==='prep'){ renderPrep(); }
 }
 document.querySelectorAll('.navbtn').forEach(b=> b.addEventListener('click', ()=> switchScreen(b.dataset.screen)));
