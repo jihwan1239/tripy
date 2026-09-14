@@ -33,7 +33,7 @@ window.APP_CONFIG = {
 
      예: "https://sapporo-ai.내계정.workers.dev"
      비워두면 각자 자기 키를 입력해서 쓰는 방식으로 동작합니다. */
-  AI_PROXY_URL: "",
+  AI_PROXY_URL: "https://sapporo-ai.chepicky.workers.dev",
 
   /* 프록시가 없을 때, 사용자가 직접 자기 OpenAI 키를 넣어 쓸 수 있게 할지 여부.
      키는 그 사람 기기에만 저장되고 다른 사람에게 전달되지 않습니다.
@@ -53,8 +53,8 @@ window.APP_CONFIG = {
 
      설정 방법은 README.md의 "친구들과 공유하기" 항목을 보세요. */
 
-  SUPABASE_URL: "",        // 예: https://xxxxxxxx.supabase.co
-  SUPABASE_ANON_KEY: "",   // Supabase의 anon public 키
+  SUPABASE_URL: "https://vgcumkqgznrratmmesxz.supabase.co/rest/v1/",        // 예: https://xxxxxxxx.supabase.co
+  SUPABASE_ANON_KEY: "sb_publishable_fDpApI-Yz0o2Oo_7d3DxgA_xB14GbHE",   // Supabase의 anon public 키
   TRIP_ID: "sapporo-2026"  // 여행방 이름. 친구들과 같은 값을 쓰면 같은 일정을 봅니다.
 
 };
