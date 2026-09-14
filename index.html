@@ -23,7 +23,7 @@
     button:hover { background: #357ABD; }
     button:disabled { background: #aaa; cursor: not-allowed; }
 
-    /* 노선 상세 스타일 */
+    /* 노선 상세 카드 스타일 */
     .route-card { background: white; border-radius: 8px; padding: 16px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     .rd-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid #eee; margin-bottom: 12px; }
     .rd-dur { font-size: 20px; font-weight: bold; color: #2c3e50; }
@@ -69,11 +69,11 @@
   <!-- 우측 구글 지도 -->
   <div id="map"></div>
 
-  <!-- Google Maps JavaScript API (YOUR_API_KEY를 실제 키로 변경하세요) -->
+  <!-- Google Maps JavaScript API (YOUR_GOOGLE_MAPS_API_KEY를 본인 발급 키로 교체) -->
   <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places"></script>
 
   <script>
-    // Worker 프록시 URL 설정
+    // Cloudflare Worker 프록시 URL 설정
     const AI_PROXY_URL = "https://your-worker.workers.dev"; // 실제 워커 URL로 교체
 
     let map;
@@ -115,7 +115,7 @@
         // [B] 지도 위에 마커 및 경로 선 그리기
         await renderRouteOnMap(start, end, routeData);
 
-        // [C] 좌측 패널에 텍스트 노선 정보 출력
+        // [C] 좌측 패널에 정제된 텍스트 노선 정보 출력
         renderRouteUI(resultDiv, routeData);
 
       } catch (err) {
@@ -128,7 +128,6 @@
 
     // 3. Cloudflare Worker로 API 요청
     async function fetchAITransitRoute(start, end, time) {
-      // 실구동 시 fetch 연동 (테스트용 mock 데이터 포함)
       try {
         const res = await fetch(AI_PROXY_URL, {
           method: "POST",
@@ -139,9 +138,8 @@
         return data.route;
       } catch (e) {
         console.warn("Worker 호출 실패, 테스트용 더미 데이터를 반환합니다.");
-        // 테스트용 Fallback 데이터
         return {
-          duration: "약 1시간 10분",
+          duration: "약 약 1시간 10분", // 중복 테스트용
           fare: "약 770엔",
           steps: [
             { mode: "transit", line: "갓파 라이너 버스", instruction: "삿포로역 버스터미널 12번 승차장에서 버스 탑승", time: "60분" },
@@ -158,7 +156,6 @@
       mapMarkers = [];
       if (mapPolyline) mapPolyline.setMap(null);
 
-      // 삿포로/홋카이도 지역 감안하여 검색 범위 보정
       const startLoc = await geocodeAddress(`${startName}, Hokkaido, Japan`);
       const endLoc = await geocodeAddress(`${endName}, Hokkaido, Japan`);
 
@@ -185,10 +182,9 @@
 
       mapMarkers.push(startMarker, endMarker);
 
-      // 선 경로 만들기 (출발 -> 도착)
+      // 직선/경로 선 생성 (출발 -> 도착)
       const pathCoordinates = [startLoc, endLoc];
 
-      // 지도에 표시할 직선/경로 선 생성
       mapPolyline = new google.maps.Polyline({
         path: pathCoordinates,
         geodesic: true,
@@ -199,14 +195,14 @@
 
       mapPolyline.setMap(map);
 
-      // 마커들이 한눈에 보이도록 지도의 화면 영역(Bounds) 조절
+      // 두 지점이 모두 보이도록 자동 줌/영역 조절
       const bounds = new google.maps.LatLngBounds();
       bounds.extend(startLoc);
       bounds.extend(endLoc);
       map.fitBounds(bounds);
     }
 
-    // 5. 주소/장소명을 LatLng 좌표로 바꿔주는 Helper 함수 (Geocoding)
+    // 5. 주소/장소명을 LatLng 좌표로 변환 (Geocoding)
     function geocodeAddress(address) {
       return new Promise((resolve) => {
         geocoder.geocode({ address: address }, (results, status) => {
@@ -220,24 +216,37 @@
       });
     }
 
-    // 6. UI에 경로 정보카드 렌더링
+    // [방법 1 핵심] 중복된 '약' 텍스트 정제 함수
+    function cleanAboutPrefix(str) {
+      if (!str) return '';
+      // '약'이 연속으로 수식되는 경우 하나로 통일 (예: "약 약 770엔" -> "약 770엔")
+      return str.replace(/^(약\s*)+/g, '약 ').trim();
+    }
+
+    // 6. UI에 경로 카드 렌더링
     function renderRouteUI(container, route) {
+      // cleanAboutPrefix 함수를 통해 '약 약' 현상 방지
+      const durationText = cleanAboutPrefix(route.duration);
+      const fareText = cleanAboutPrefix(route.fare);
+
       let html = `
         <div class="route-card">
           <div class="rd-head">
-            <span class="rd-dur">${route.duration}</span>
-            <span class="rd-fare">${route.fare}</span>
+            <span class="rd-dur">${durationText}</span>
+            <span class="rd-fare">${fareText}</span>
           </div>
           <ul class="rd-steps">
       `;
 
-      route.steps.forEach(step => {
+      (route.steps || []).forEach(step => {
         const isWalk = step.mode === 'walk';
+        const stepTime = cleanAboutPrefix(step.time);
+        
         html += `
           <li class="rs ${isWalk ? 'walk' : ''}">
-            <span class="rs-kind ${isWalk ? 'walk' : ''}">${step.line || '대중교통'}</span>
+            <span class="rs-kind ${isWalk ? 'walk' : ''}">${step.line || (isWalk ? '도보' : '대중교통')}</span>
             <div class="rs-inst">${step.instruction}</div>
-            <div class="rs-time">${step.time}</div>
+            <div class="rs-time">${stepTime}</div>
           </li>
         `;
       });
