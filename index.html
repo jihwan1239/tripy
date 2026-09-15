@@ -54,6 +54,11 @@
 
   /* 목록 항목 진입 */
   .trow{ animation:rowIn .2s ease both; }
+  /* 날짜 전환 */
+  .day-anim-l{ animation:dayL .3s var(--ease) both; }
+  .day-anim-r{ animation:dayR .3s var(--ease) both; }
+  @keyframes dayL{ from{ opacity:0; transform:translateX(-14px); } to{ opacity:1; transform:none; } }
+  @keyframes dayR{ from{ opacity:0; transform:translateX(14px); } to{ opacity:1; transform:none; } }
   @keyframes rowIn{ from{ opacity:0; transform:translateY(-3px); } to{ opacity:1; transform:none; } }
 
   /* 스크롤 관성 */
@@ -107,9 +112,9 @@
     font-variant-numeric:tabular-nums; }
   .daychip .l{ display:block; font-size:13.5px; font-weight:600; letter-spacing:-.02em; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; }
-  .daychip.active{ background:var(--ink); color:#fff; }
+  .daychip.active{ background:var(--red); color:#fff; }
   .daychip.active .l{ color:#fff; }
-  .daychip.active .d{ opacity:.65; }
+  .daychip.active .d{ opacity:.8; }
 
   .bottom-stack{ position:absolute; left:0; right:0; bottom:0; z-index:500;
     display:flex; flex-direction:column; gap:9px; padding-bottom:12px; pointer-events:none; }
@@ -931,10 +936,27 @@ function inActivePlan(day, stop){
   if(!stop.plan) return true;
   return stop.plan === activePlanId(day);
 }
-function addPlan(day){
+/* 새 안을 만들 때 기존 일정을 현재 안에 확정 귀속시켜, 안끼리 서로 영향이 없게 합니다 */
+function addPlan(day, copyCurrent){
   const ps = dayPlans(day);
-  const np = { id:'p'+Date.now().toString(36), name:`${ps.length+1}안` };
+  const cur = activePlanId(day);
+
+  // 아직 어느 안에도 속하지 않은 일정을 현재 안으로 귀속 (자동 생성 항목은 공통 유지)
+  day.stops.forEach(s=>{ if(!s.plan && !s.stay && !s.flight) s.plan = cur; });
+
+  const np = { id:'p'+Date.now().toString(36)+Math.floor(Math.random()*90+10), name:`${ps.length+1}안` };
   ps.push(np);
+
+  if(copyCurrent){
+    day.stops.filter(s=> s.plan===cur).forEach(s=>{
+      const c = JSON.parse(JSON.stringify(s));
+      c.id = newUid(); c.plan = np.id;
+      delete c.aiRoute; delete c.taxiFare; delete c.taxiNote;
+      day.stops.push(c);
+    });
+    day.stops.sort((a,b)=>a.time.localeCompare(b.time));
+  }
+
   day.activePlan = np.id;
   markChanged();
 }
@@ -943,7 +965,11 @@ function removePlan(day, planId){
   if(ps.length<=1) return false;
   day.plans = ps.filter(p=>p.id!==planId);
   day.stops = day.stops.filter(x=> x.plan!==planId);
+  day.plans.forEach((p,i)=>{ p.name = `${i+1}안`; });   // 번호 다시 정리
   day.activePlan = day.plans[0].id;
+  if(day.plans.length===1){                              // 안이 하나면 귀속 해제
+    day.stops.forEach(x=>{ delete x.plan; });
+  }
   markChanged();
   return true;
 }
@@ -1641,10 +1667,24 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 
 /* ================= DAY CHIPS ================= */
 /* 날짜를 바꾸면 두 화면 모두 갱신합니다 */
+let lastDayIndex = 0;
+function playDayAnim(){
+  const idx = TRIP.days.findIndex(d=>d.id===activeDayId);
+  const cls = idx >= lastDayIndex ? 'day-anim-r' : 'day-anim-l';
+  lastDayIndex = idx<0? 0 : idx;
+  ['stopListEdit','carousel'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.classList.remove('day-anim-l','day-anim-r');
+    void el.offsetWidth;            // 애니메이션 재시작
+    el.classList.add(cls);
+  });
+}
 function onDayChange(){
   closeForm(); closeDayForm();
   renderMapForDay(); renderCarousel();
   if(document.getElementById('screen-schedule').classList.contains('active')) renderScheduleScreen();
+  playDayAnim();
 }
 
 function renderDayChips(containerId, afterClick){
@@ -1656,9 +1696,12 @@ function renderDayChips(containerId, afterClick){
     el.className='daychip'+(d.id===activeDayId?' active':'');
     el.innerHTML=`<span class="d">${fmtDate(d.iso)} ${fmtDow(d.iso)}</span><span class="l">${esc(d.label||'일정')}</span>`;
     el.addEventListener('click', ()=>{
+      if(activeDayId===d.id) return;
       activeDayId=d.id; activeStopId=null;
       renderDayChips(containerId, afterClick);
       afterClick();
+      const now=document.querySelector(`#${containerId} .daychip.active`);
+      if(now) now.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
     });
     wrap.appendChild(el);
   });
@@ -1862,7 +1905,7 @@ function renderPlanBar(day){
   if(!el) return;
   if(!day){ el.innerHTML=''; return; }
   const ps=dayPlans(day), act=activePlanId(day);
-  const count=(pid)=> day.stops.filter(x=> !x.plan || x.plan===pid).length;
+  const count=(pid)=> day.stops.filter(x=> (!x.plan && (x.stay||x.flight)) || !x.plan || x.plan===pid).length;
 
   const many = ps.length>1;
   el.innerHTML = ps.map(p=>`
@@ -1901,8 +1944,13 @@ function renderPlanBar(day){
 
   const add=document.getElementById('planAdd');
   if(add) add.addEventListener('click', ()=>{
-    addPlan(day); activeStopId=null; renderScheduleScreen(); refreshAll();
-    toast('새 안을 만들었어요. 여기서 추가하는 일정은 이 안에만 들어가요');
+    const hasStops = day.stops.some(s=> !s.stay && !s.flight && (!s.plan || s.plan===act));
+    const copy = hasStops
+      ? confirm('지금 일정을 복사해서 새 안을 시작할까요?\n\n확인 = 복사해서 시작 (이후 수정은 서로 영향 없음)\n취소 = 빈 안으로 시작')
+      : false;
+    addPlan(day, copy);
+    activeStopId=null; renderScheduleScreen(); refreshAll();
+    toast(copy? '일정을 복사한 새 안을 만들었어요' : '빈 안을 만들었어요');
   });
 }
 
