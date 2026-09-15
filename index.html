@@ -25,11 +25,28 @@
     --font-mono:'IBM Plex Mono', monospace;
     --r-lg:20px; --r-md:14px; --r-sm:10px;
   }
-  *{box-sizing:border-box;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  button, .trow, .place-card, .prep-item, .geo-result{ touch-action:manipulation; }
   html,body{margin:0;padding:0;height:100%;}
   body{ background:#DCDCE0; color:var(--ink); font-family:var(--font-body);
     -webkit-font-smoothing:antialiased; overscroll-behavior:none; }
-  button{font-family:inherit;}
+  button{ font-family:inherit; transition:transform .12s ease, background .16s ease, color .16s ease, border-color .16s ease; }
+  button:active{ transform:scale(.97); }
+  .navbtn:active, .modal-close:active{ transform:none; }
+
+  /* 화면 전환 */
+  .screen.active{ animation:screenIn .22s ease; }
+  @keyframes screenIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+
+  /* 목록 항목 진입 */
+  .trow{ animation:rowIn .2s ease both; }
+  @keyframes rowIn{ from{ opacity:0; transform:translateY(-3px); } to{ opacity:1; transform:none; } }
+
+  /* 스크롤 관성 */
+  .screen, .carousel, .geo-results, .modal{ -webkit-overflow-scrolling:touch; }
+
+  /* 지도 핀 */
+  .pin-wrap{ transition:transform .18s ease; }
   .app{ max-width:520px; margin:0 auto; height:100vh; height:100dvh;
     background:var(--paper); display:flex; flex-direction:column;
     position:relative; overflow:hidden; box-shadow:0 0 48px rgba(0,0,0,.18); }
@@ -95,7 +112,9 @@
   .carousel::before, .carousel::after{ content:''; flex:0 0 var(--edge); }
   .place-card{ scroll-snap-align:center; scroll-snap-stop:always; flex:0 0 var(--cardw);
     background:#fff; border-radius:var(--r-lg); padding:14px 16px 15px; cursor:pointer;
-    box-shadow:var(--shadow-float); border:1.5px solid transparent; transition:border-color .18s ease; }
+    box-shadow:var(--shadow-float); border:1.5px solid transparent;
+    transition:border-color .2s ease, transform .2s ease, box-shadow .2s ease; }
+  .place-card.active{ transform:translateY(-2px); }
   .place-card.active{ border-color:var(--red); }
   .place-card.empty{ text-align:center; color:var(--muted); font-size:13px; padding:22px 16px; }
   .pc-top{ display:flex; align-items:center; gap:8px; margin-bottom:9px; }
@@ -172,7 +191,45 @@
 
   /* 항공편 폼 */
   .fl-sec{ font-size:12px; font-weight:700; color:var(--red); margin-bottom:10px;
-    padding-bottom:7px; border-bottom:1px solid var(--line); }
+    padding-bottom:7px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; }
+  .fl-use{ display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--muted); font-weight:600; }
+  .fl-use input{ width:15px; height:15px; accent-color:var(--red); margin:0; }
+
+  /* 시간 입력 */
+  .tf{ position:relative; }
+  .tf-box{ position:relative; }
+  .tf-input{ width:100%; padding:13px !important; border-radius:var(--r-sm) !important;
+    border:1px solid var(--line-2) !important; background:var(--tint) !important;
+    font-family:var(--font-mono) !important; font-size:20px !important; font-weight:600;
+    letter-spacing:.06em; text-align:center; }
+  .tf-ctrl{ display:flex; gap:7px; margin-top:8px; }
+  .tf-seg{ display:flex; border:1px solid var(--line-2); border-radius:999px; overflow:hidden; background:#fff; }
+  .tf-seg button{ border:none; background:none; color:var(--muted);
+    padding:7px 13px; font-size:11.5px; font-weight:700; cursor:pointer; }
+  .tf-seg button.on{ background:var(--ink); color:#fff; }
+  .tf-ampm{ flex:1; }
+  .tf-ampm button{ flex:1; }
+  .tf-fmt{ flex:0 0 auto; }
+  .tf-fmt button{ font-family:var(--font-mono); }
+  .tf-fmt button.on{ background:var(--red); }
+  .tf.h24 .tf-ampm{ display:none; }
+  .tf.bad .tf-input{ border-color:var(--red) !important; color:var(--red); background:#FFF6F7 !important; }
+  .tf.shake .tf-input{ animation:tfShake .32s cubic-bezier(.36,.07,.19,.97) both; }
+  .tf.reverted .tf-input{ animation:tfPop .38s ease; }
+  @keyframes tfShake{
+    10%,90%{ transform:translateX(-2px); }
+    20%,80%{ transform:translateX(4px); }
+    30%,50%,70%{ transform:translateX(-7px); }
+    40%,60%{ transform:translateX(7px); }
+  }
+  @keyframes tfPop{
+    0%{ transform:scale(.97); opacity:.55; }
+    55%{ transform:scale(1.015); opacity:1; }
+    100%{ transform:scale(1); }
+  }
+  .tf-hint{ position:absolute; right:13px; top:50%; transform:translateY(-50%);
+    font-size:10.5px; color:var(--muted-2); pointer-events:none; }
   .sched-days{ display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
   .sched-days::-webkit-scrollbar{ display:none; }
   .sched-days .daychip{ box-shadow:none; background:var(--tint); }
@@ -180,6 +237,51 @@
   .list-body{ padding:16px 18px 120px; }
   .empty-note{ background:#fff; border-radius:var(--r-md); padding:26px 18px; text-align:center;
     color:var(--muted); font-size:13px; line-height:1.7; box-shadow:0 2px 10px rgba(26,26,30,.05); }
+
+  /* ===== 표 형식 일정 ===== */
+  .tbl{ background:#fff; border-radius:var(--r-md); overflow:hidden;
+    box-shadow:0 2px 10px rgba(26,26,30,.05); }
+  .trow{ display:flex; align-items:center; gap:10px; padding:12px 13px; cursor:pointer;
+    border-bottom:1px solid var(--line); }
+  .trow:last-child{ border-bottom:none; }
+  .trow.open{ background:var(--tint); }
+  .trow.optional{ background:#FFFDF8; }
+  .tc-num{ flex:0 0 20px; height:20px; border-radius:50%; background:var(--red); color:#fff;
+    font-family:var(--font-mono); font-size:10px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; }
+  .tc-num.tbd{ background:var(--muted-2); }
+  .tc-num.opt{ background:#E8A33D; }
+  .tc-time{ flex:0 0 42px; font-family:var(--font-mono); font-size:13px; font-weight:600; color:var(--ink); }
+  .tc-main{ flex:1; min-width:0; }
+  .tc-name{ font-size:14px; font-weight:700; letter-spacing:-.015em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tc-sub{ font-size:11px; color:var(--muted-2); margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tc-caret{ flex:0 0 auto; color:var(--muted-2); font-size:16px; }
+  .trow.open .tc-caret{ transform:rotate(90deg); }
+  .mini-badge{ font-size:9.5px; font-weight:700; border-radius:4px; padding:1px 5px; margin-left:4px;
+    vertical-align:middle; }
+  .mini-badge.opt{ background:#FFF4E0; color:#B4720A; }
+  .mini-badge.stay{ background:var(--red-soft); color:var(--red); }
+  .mini-badge.fl{ background:#E9F0FF; color:#2F6BD8; }
+
+  /* 이동 줄 */
+  .tmove{ display:flex; align-items:center; gap:8px; padding:6px 13px; background:var(--tint);
+    border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .tm-add{ flex:0 0 20px; width:20px; height:20px; border-radius:50%; border:1px dashed var(--line-2);
+    background:#fff; color:var(--muted); font-size:13px; line-height:1; cursor:pointer; padding:0;
+    display:flex; align-items:center; justify-content:center; }
+  .tm-open{ flex:1; min-width:0; display:flex; align-items:center; gap:6px; border:none;
+    background:none; padding:4px 0; cursor:pointer; color:var(--muted); font-size:11.5px; font-weight:600; }
+  .tm-open .icon{ width:13px; height:13px; }
+  .tm-label{ flex:1; min-width:0; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tm-fare{ font-family:var(--font-mono); color:var(--ink); font-weight:600; }
+  .tm-caret{ flex:0 0 auto; }
+  .tm-open.open .tm-caret{ transform:rotate(180deg); display:inline-block; }
+  .tm-detail{ width:100%; border-top:1px solid var(--line); margin-top:4px; }
+  .tm-detail .leg{ padding:6px 0; }
+  .tm-detail .leg .rail{ display:none; }
+  .tm-detail .legbody{ padding:8px 0; }
 
   .stop{ display:flex; gap:12px; background:#fff; border-radius:var(--r-md); padding:14px; box-shadow:0 2px 10px rgba(26,26,30,.05); }
   .stop .num{ flex:0 0 22px; height:22px; border-radius:50%; background:var(--red); color:#fff;
@@ -231,6 +333,14 @@
   .rd-none.err{ color:var(--red); background:var(--red-soft); }
   .rd-none b{ font-weight:700; }
   .err-hint{ color:var(--red) !important; }
+  .bk-wrap{ margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+  .bk-title{ font-size:14px; font-weight:700; margin-bottom:6px; }
+  .bk-row{ display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .bk-row:last-child{ border-bottom:none; }
+  .bk-meta{ flex:1; min-width:0; font-size:12px; color:var(--muted); }
+  .bk-meta b{ color:var(--ink); font-family:var(--font-mono); }
+  .bk-btn{ flex:0 0 auto; border:1px solid var(--line-2); background:#fff; color:var(--ink);
+    border-radius:999px; padding:6px 12px; font-size:11.5px; font-weight:700; cursor:pointer; }
   .rd-seg.line{ color:#fff; border-color:transparent; background:var(--red); }
 
   /* 단계별 안내 */
@@ -286,11 +396,18 @@
   .ai-btn .icon{ color:#C9B4FF; }
   .ai-btn:disabled{ opacity:.55; }
   .rd-est{ margin-top:6px; font-family:var(--font-mono); font-size:11.5px; color:var(--ink); }
+  .rd-why{ display:block; width:100%; text-align:left; border:none; background:none; padding:9px 0 0;
+    font-size:11px; color:var(--muted-2); cursor:pointer; }
+  .rd-why::after{ content:' ⌄'; }
+  .rd-why.open::after{ content:' ⌃'; }
+  .rd-why-box{ font-size:11.5px; color:var(--muted); line-height:1.65; background:var(--tint);
+    border-radius:var(--r-sm); padding:10px 12px; margin-top:7px; }
 
   /* AI 경로 결과 */
   .ai-route{ margin-top:10px; background:#F7F4FF; border:1px solid #E4DAFF;
     border-radius:var(--r-md); padding:13px; }
-  .ai-route.loading{ color:var(--muted); font-size:12px; }
+  .ai-route.loading{ color:var(--muted); font-size:12px; animation:pulse 1.3s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
   .ai-route-tag{ font-size:10px; font-weight:700; color:#7C4DFF; letter-spacing:.02em; margin-bottom:5px; }
   .ai-route-sum{ font-size:13px; font-weight:700; line-height:1.45; margin-bottom:6px; }
   .ai-route .rd-steps{ border-left-color:#E0D4FF; }
@@ -373,7 +490,10 @@
   /* ===== MODAL ===== */
   .modal-bg{ position:fixed; inset:0; background:rgba(26,26,30,.5); display:none;
     align-items:flex-end; justify-content:center; z-index:1000; }
-  .modal-bg.open{ display:flex; }
+  .modal-bg.open{ display:flex; animation:fadeIn .18s ease; }
+  .modal-bg.open .modal{ animation:sheetUp .26s cubic-bezier(.2,.9,.3,1); }
+  @keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
+  @keyframes sheetUp{ from{ transform:translateY(26px); } to{ transform:none; } }
   .modal{ width:100%; max-width:520px; background:#fff; border-radius:24px 24px 0 0;
     max-height:86vh; overflow-y:auto; padding:22px 20px 26px; position:relative; }
   .modal h2{ font-size:18px; font-weight:700; margin:0 0 5px; letter-spacing:-.02em; }
@@ -423,8 +543,14 @@
   .toast{ position:fixed; left:50%; bottom:86px; transform:translate(-50%, 16px);
     background:var(--ink); color:#fff; padding:11px 18px; border-radius:999px;
     font-size:12.5px; font-weight:600; z-index:2000; opacity:0; pointer-events:none;
-    transition:opacity .22s ease, transform .22s ease; max-width:86vw; text-align:center; }
-  .toast.show{ opacity:1; transform:translate(-50%, 0); }
+    transition:opacity .22s ease, transform .22s cubic-bezier(.2,.9,.3,1.2);
+    max-width:86vw; text-align:center; box-shadow:0 8px 24px rgba(26,26,30,.28); }
+  .toast.show{ opacity:1; transform:translate(-50%, 0) scale(1); }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  }
 </style>
 </head>
 <body>
@@ -732,6 +858,40 @@ function readLocal(){
 function writeLocal(){
   try{ localStorage.setItem(LS_TRIP, JSON.stringify(TRIP)); }catch(e){}
 }
+
+/* 덮어쓰기 전 스냅샷을 남겨둡니다 (최근 8개) */
+const LS_BACKUP = 'sapporo-backup:'+CFG.TRIP_ID;
+function readBackups(){
+  try{ return JSON.parse(localStorage.getItem(LS_BACKUP)||'[]'); }catch(e){ return []; }
+}
+function pushBackup(trip, why){
+  if(!trip || !trip.days) return;
+  try{
+    const list = readBackups();
+    const last = list[0];
+    const body = JSON.stringify(trip);
+    if(last && last.body===body) return;          // 같은 내용이면 건너뜀
+    list.unshift({ at:Date.now(), why:why||'', count:trip.days.reduce((n,d)=>n+d.stops.length,0), body });
+    localStorage.setItem(LS_BACKUP, JSON.stringify(list.slice(0,8)));
+  }catch(e){}
+}
+function restoreBackup(idx){
+  const list = readBackups();
+  const b = list[idx];
+  if(!b) return;
+  try{
+    pushBackup(TRIP, '복구 전');
+    TRIP = JSON.parse(b.body);
+    TRIP.updatedAt = Date.now();                  // 이 내용이 최신이 되도록
+    writeLocal();
+    if(HAS_SYNC && syncReady) cloudPut().catch(()=>{});
+    activeDayId = TRIP.days.length? TRIP.days[0].id : null;
+    activeStopId = null;
+    refreshAll(); renderScheduleScreen();
+    document.getElementById('statusModalBg').classList.remove('open');
+    toast('이전 일정으로 되돌렸어요');
+  }catch(e){ toast('복구하지 못했어요'); }
+}
 function encodeTrip(){
   const json = JSON.stringify(TRIP);
   const bytes = new TextEncoder().encode(json);
@@ -770,10 +930,11 @@ async function cloudPut(){
   if(!res.ok) throw new Error('save '+res.status);
 }
 
+let syncReady = !HAS_SYNC;   // 첫 동기화 전에는 서버로 올리지 않습니다
 function markChanged(){
   TRIP.updatedAt = Date.now();
   writeLocal();
-  if(!HAS_SYNC) return;
+  if(!HAS_SYNC || !syncReady) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(async ()=>{
     try{ await cloudPut(); setSyncLabel('동기화됨'); }
@@ -791,6 +952,7 @@ async function pullRemote(quiet){
     const remote = await cloudGet();
     if(remote && (remote.updatedAt||0) > (TRIP.updatedAt||0)){
       if(dayFormOpen || editingStopId!==null) return;
+      pushBackup(TRIP, '서버 내용으로 갱신 전');
       TRIP = remote;
       TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
       writeLocal();
@@ -877,9 +1039,14 @@ function drawStationDot(lat,lng,color,title){
    — 지하철·노면전차는 선로 모양이 잘 정리돼 있어요
    ========================================================= */
 const AI_COLOR = '#7C4DFF';
-const OSM_LS_KEY = 'osm-lines:sapporo:v1';
+const OSM_LS_KEY = 'osm-lines:sapporo:v2';
 const OSM_TTL = 30*24*60*60*1000;          // 30일 캐시
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter'
+];
+let osmStatus = '아직 불러오지 않음';
 
 /* 삿포로 주요 노선 별칭 — AI가 한국어로 답해도 매칭되도록 */
 const LINE_ALIAS = [
@@ -940,35 +1107,47 @@ async function loadOsmLines(){
   if(cached){ osmLines = cached; return osmLines; }
   if(osmLoading) return osmLoading;
 
-  const q = `[out:json][timeout:60];
-relation["type"="route"]["route"~"^(subway|light_rail|tram|train)$"](42.90,141.15,43.25,141.60);
-out geom tags;`;
+  // out geom; 만 써야 멤버 지오메트리가 함께 옵니다 (out tags 를 붙이면 태그만 옵니다)
+  const q = `[out:json][timeout:90];
+(
+  relation["type"="route"]["route"~"^(subway|light_rail|tram)$"](42.85,141.10,43.30,141.65);
+  relation["type"="route"]["route"="train"]["operator"~"JR"](42.85,141.10,43.30,141.65);
+);
+out geom;`;
 
   osmLoading = (async ()=>{
-    try{
-      const res = await fetch(OVERPASS, { method:'POST', body:'data='+encodeURIComponent(q),
-        headers:{'Content-Type':'application/x-www-form-urlencoded'} });
-      if(!res.ok) throw new Error('overpass '+res.status);
-      const data = await res.json();
-      const lines = (data.elements||[]).map(el=>{
-        const t = el.tags||{};
-        return {
-          name: t.name || t['name:ja'] || t.ref || '',
-          nameEn: t['name:en'] || '',
-          ref: t.ref || '',
-          colour: t.colour || t.color || null,
-          path: stitchWays(el.members||[])
-        };
-      }).filter(l=> l.path.length>3);
-      osmLines = lines;
-      writeOsmCache(lines);
-      return lines;
-    }catch(e){
-      console.warn('[Overpass] 노선 데이터를 불러오지 못했어요', e);
-      osmLines = [];
-      return osmLines;
-    }finally{ osmLoading = null; }
-  })();
+    for(const url of OVERPASS_ENDPOINTS){
+      try{
+        const res = await fetch(url, { method:'POST', body:'data='+encodeURIComponent(q),
+          headers:{'Content-Type':'application/x-www-form-urlencoded'} });
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data = await res.json();
+        const lines = (data.elements||[]).map(el=>{
+          const t = el.tags||{};
+          return {
+            name: t.name || t['name:ja'] || t.ref || '',
+            nameEn: t['name:en'] || '',
+            nameKo: t['name:ko'] || '',
+            ref: t.ref || '',
+            colour: t.colour || t.color || null,
+            path: stitchWays(el.members||[])
+          };
+        }).filter(l=> l.path.length>3);
+
+        if(!lines.length) throw new Error('노선 0건');
+        osmLines = lines;
+        osmStatus = `노선 ${lines.length}개 불러옴`;
+        writeOsmCache(lines);
+        console.info('[Overpass]', osmStatus, lines.map(l=>l.name));
+        return lines;
+      }catch(e){
+        console.warn('[Overpass] 실패:', url, e.message);
+      }
+    }
+    osmLines = [];
+    osmStatus = '불러오지 못함 (직선으로 표시)';
+    return osmLines;
+  })().finally(()=>{ osmLoading = null; });
   return osmLoading;
 }
 
@@ -983,7 +1162,7 @@ function matchOsmLine(lineName){
 
   let best=null;
   for(const l of osmLines){
-    const hay = normText(l.name + l.nameEn + l.ref);
+    const hay = normText(l.name + l.nameEn + (l.nameKo||'') + l.ref);
     if(hay.includes(wanted) || (alias && hay.includes(normText(alias.ja.replace('線',''))))){
       if(!best || l.path.length > best.path.length) best = l;
     }
@@ -1004,7 +1183,7 @@ function nearestIndex(path, pt){
 }
 function sliceLine(path, a, b){
   const A=nearestIndex(path,a), B=nearestIndex(path,b);
-  if(A.dist>1.2 || B.dist>1.2) return null;    // 역이 노선에서 너무 멀면 포기
+  if(A.dist>2.0 || B.dist>2.0) return null;    // 역이 노선에서 너무 멀면 포기
   const [s,e] = A.idx<=B.idx ? [A.idx,B.idx] : [B.idx,A.idx];
   const seg = path.slice(s, e+1);
   if(seg.length<2) return null;
@@ -1089,6 +1268,33 @@ async function drawRoutesForDay(){
     }
   }
 }
+function groupViewOf(g){
+  const act=g.items.find(it=>it.stop.id===activeStopId);
+  return { shown: act || g.items[0], active: !!act, multi: g.items.length>1 };
+}
+
+/* 마커를 새로 만들지 않고 강조 상태만 바꿉니다 (부드럽고 빠름) */
+function refreshMarkerStyles(){
+  if(engine==='leaflet'){
+    lMarkers.forEach(mk=>{
+      const g=mk._group; if(!g) return;
+      const v=groupViewOf(g), size=v.active?34:27;
+      mk.setIcon(L.divIcon({ className:'pin-wrap', html:pinHtml(v.shown.num, v.active, v.multi),
+        iconSize:[size,size], iconAnchor:[size/2,size-2] }));
+      mk.setZIndexOffset(v.active? 1000 : 0);
+    });
+  } else {
+    gMarkers.forEach(mk=>{
+      const g=mk._group; if(!g) return;
+      const v=groupViewOf(g);
+      mk.setLabel({ text:String(v.shown.num), color:'#fff', fontSize:'11px', fontWeight:'600' });
+      mk.setIcon({ path:google.maps.SymbolPath.CIRCLE, fillColor:v.active?'#1A1A1E':'#E03B4B',
+        fillOpacity:1, strokeColor:'#fff', strokeWeight:2.5, scale:v.active?15:12 });
+      mk.setZIndex(v.active? 1000 : 1);
+    });
+  }
+}
+
 function renderMapForDay(){
   const day=currentDay(); clearMapLayers();
   if(!day) return;
@@ -1102,10 +1308,7 @@ function renderMapForDay(){
     if(!g){ g={key, lat:s.lat, lng:s.lng, items:[]}; groups.push(g); }
     g.items.push({ stop:s, num:i+1 });
   });
-  function groupView(g){
-    const act=g.items.find(it=>it.stop.id===activeStopId);
-    return { shown: act || g.items[0], active: !!act, multi: g.items.length>1 };
-  }
+  const groupView = groupViewOf;
   function groupClick(g){
     const i=g.items.findIndex(it=>it.stop.id===activeStopId);
     const next=g.items[(i+1) % g.items.length];   // 겹친 핀은 누를 때마다 다음 일정으로
@@ -1117,11 +1320,13 @@ function renderMapForDay(){
     groups.forEach(g=>{
       const v=groupView(g), size=v.active?34:27;
       const mk=L.marker([g.lat,g.lng],{
-        icon:L.divIcon({className:'', html:pinHtml(v.shown.num, v.active, v.multi),
+        icon:L.divIcon({className:'pin-wrap', html:pinHtml(v.shown.num, v.active, v.multi),
           iconSize:[size,size], iconAnchor:[size/2,size-2]}),
-        zIndexOffset: v.active? 1000 : 0
+        zIndexOffset: v.active? 1000 : 0,
+        riseOnHover:true
       }).addTo(lmap);
       mk.on('click', ()=> groupClick(g));
+      mk._group = g;
       lMarkers.push(mk);
     });
     withLoc.forEach(s=> pts.push([s.lat,s.lng]));
@@ -1140,6 +1345,7 @@ function renderMapForDay(){
         title: v.multi? `${g.items.map(it=>it.num).join(', ')}번 일정` : ''
       });
       mk.addListener('click', ()=> groupClick(g));
+      mk._group = g;
       gMarkers.push(mk);
     });
     withLoc.forEach(s=> pts.push({lat:s.lat,lng:s.lng}));
@@ -1149,8 +1355,18 @@ function renderMapForDay(){
   drawRoutesForDay();
 }
 function panTo(lat,lng,zoom){
-  if(engine==='leaflet') lmap.setView([lat,lng],zoom||14,{animate:true});
-  else { gmap.panTo({lat,lng}); gmap.setZoom(zoom||14); }
+  const z = zoom || 14;
+  if(engine==='leaflet'){
+    const cur = lmap.getZoom();
+    if(Math.abs(cur - z) < 0.6){
+      lmap.panTo([lat,lng], { animate:true, duration:0.45, easeLinearity:0.28 });
+    } else {
+      lmap.flyTo([lat,lng], z, { animate:true, duration:0.7, easeLinearity:0.25 });
+    }
+  } else {
+    if(gmap.getZoom() !== z) gmap.setZoom(z);
+    gmap.panTo({lat,lng});
+  }
 }
 function bootGoogleMaps(){
   window.__gmapReady=()=>{
@@ -1179,7 +1395,8 @@ function selectStop(id, fly, scrollCard){
   activeStopId=id;
   const info=stopById(id);
   if(info && !info.stop.tbd && fly) panTo(info.stop.lat, info.stop.lng, 14);
-  renderMapForDay(); updateCardActive();
+  refreshMarkerStyles();          // 마커를 다시 그리지 않아 끊김이 없어요
+  updateCardActive();
   if(scrollCard) scrollCardIntoCenter(id);
 }
 function updateCardActive(){
@@ -1218,7 +1435,7 @@ function renderCarousel(){
     card.innerHTML=`
       <div class="pc-top">
         <span class="pc-num ${s.tbd?'tbd':''}">${idx>=0? idx+1:'–'}</span>
-        <span class="pc-time">${s.time}</span>
+        <span class="pc-time">${fmtClock(s.time)}</span>
         <span class="pc-chip"><span class="icon">${iconSvg(CATS[s.cat])}</span>${s.cat}</span>
       </div>
       <div class="pc-name">${esc(s.name)}</div>
@@ -1272,7 +1489,7 @@ function onCarouselScroll(){
     if(!best||!best.dataset.id) return;
     const id=Number(best.dataset.id);
     if(id!==activeStopId) selectStop(id,true,false);
-  },110);
+  },70);
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -1326,7 +1543,12 @@ function renderScheduleScreen(){
     stayBtn.classList.remove('set');
   }
 
-  const wrap=document.getElementById('stopListEdit'); wrap.innerHTML='';
+  const wrap=document.getElementById('stopListEdit');
+  // 폼이 표 안에 들어가 있으면 먼저 밖으로 빼둡니다 (표를 비울 때 같이 지워지지 않도록)
+  const faKeep = document.getElementById('formArea');
+  const body = document.querySelector('.list-body');
+  if(faKeep && body && faKeep.parentNode !== body) body.appendChild(faKeep);
+  wrap.innerHTML='';
   const sumEl=document.getElementById('daySummary');
   if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; sumEl.innerHTML=''; return; }
 
@@ -1341,302 +1563,107 @@ function renderScheduleScreen(){
   }
 
   const withLoc=list.filter(s=>!s.tbd && s.lat!=null);
+  const tbl=document.createElement('div'); tbl.className='tbl';
+
   list.forEach((s,i)=>{
     const idx=withLoc.indexOf(s);
-    const el=document.createElement('div'); el.className='stop'+(s.opt?' optional':'');
-    el.innerHTML=`
-      <div class="num ${s.tbd?'tbd':''} ${s.opt?'opt':''}">${idx>=0? idx+1:'?'}</div>
-      <div class="body">
-        <div class="time">${esc(s.time)}</div>
-        <div class="name">${esc(s.name)}</div>
-        <div class="note">${esc(s.note||'')}</div>
-        ${s.place? `<div class="loc"><span class="icon">${iconSvg('navMap')}</span><span>${esc(s.place)}</span></div>`:''}
-        <div class="row2">
-          <span class="tag">${s.cat}${s.tbd?' · 위치 미정':''}</span>
-          ${s.stay? '<span class="tag stay-tag">숙소 출발</span>':''}
-          ${s.opt? '<span class="tag opt-tag">선택</span>':''}
-          ${s.flight? `<span class="tag flight-tag">${s.flight==='in'?'입국':'출국'}</span>`:''}
-          <button class="edit-btn">수정</button>
-        </div>
-      </div>`;
-    el.querySelector('.edit-btn').addEventListener('click', ()=> openForm(s.id));
-    wrap.appendChild(el);
+    tbl.appendChild(rowEl(s, idx));
     const next=list[i+1];
-    if(next) wrap.appendChild(buildLeg(s,next));
+    if(next) tbl.appendChild(moveBar(s, next));
   });
+  wrap.appendChild(tbl);
 }
 
-/* =========================================================
-   경로 조회 (공통) — 지도와 일정표가 같은 결과를 씁니다
-   ========================================================= */
-const routeCache = {};
-let lastDirStatus = null;
-
-const DIR_STATUS_MSG = {
-  ZERO_RESULTS:
-    '이 구간의 경로를 찾지 못했어요. 거리가 아주 가깝거나 해당 수단의 운행 정보가 없는 구간일 수 있어요.',
-  REQUEST_DENIED:
-    'Directions API 요청이 거부됐어요(REQUEST_DENIED). Google Cloud Console에서 <b>Directions API</b>가 사용 설정되어 있는지, API 키의 <b>API 제한사항</b>에 Directions API가 포함되어 있는지 확인해주세요.',
-  OVER_QUERY_LIMIT:
-    '요청 한도를 넘었어요(OVER_QUERY_LIMIT). 잠시 후 다시 시도하거나 Cloud Console에서 사용량을 확인해주세요.',
-  INVALID_REQUEST:
-    '요청 형식이 올바르지 않아요(INVALID_REQUEST). 출발지나 도착지 좌표를 확인해주세요.',
-  NOT_FOUND:
-    '출발지나 도착지를 지도에서 찾지 못했어요(NOT_FOUND). 위치를 다시 지정해보세요.',
-  UNKNOWN_ERROR:
-    '구글 서버에서 일시적인 오류가 발생했어요(UNKNOWN_ERROR). 잠시 후 다시 시도하면 대개 해결돼요.',
-  MAX_WAYPOINTS_EXCEEDED: '경유지가 너무 많아요.',
-  MAX_ROUTE_LENGTH_EXCEEDED: '경로가 너무 길어요.'
-};
-function dirStatusMsg(st){
-  return DIR_STATUS_MSG[st] || `경로를 불러오지 못했어요 (${esc(String(st||'알 수 없음'))}).`;
+/* 표 한 줄 */
+function rowEl(s, idx){
+  const el=document.createElement('div');
+  el.className='trow'+(s.opt?' optional':'');
+  el.dataset.id=s.id;
+  const sub=[s.cat];
+  if(s.place) sub.push(s.place);
+  el.innerHTML=`
+    <div class="tc-num ${s.tbd?'tbd':''} ${s.opt?'opt':''}">${idx>=0? idx+1:'?'}</div>
+    <div class="tc-time">${esc(fmtClock(s.time))}</div>
+    <div class="tc-main">
+      <div class="tc-name">${esc(s.name)}
+        ${s.opt? '<span class="mini-badge opt">선택</span>':''}
+        ${s.stay? '<span class="mini-badge stay">숙소</span>':''}
+        ${s.flight? `<span class="mini-badge fl">${s.flight==='in'?'입국':'출국'}</span>`:''}</div>
+      <div class="tc-sub">${esc(sub.join(' · '))}</div>
+    </div>
+    <span class="tc-caret">›</span>`;
+  el.addEventListener('click', ()=> openFormAt(el, s.id));
+  return el;
 }
-function timeBucket(){ return Math.floor(Date.now()/(60*1000)); }  // 1분 단위 갱신
 
-function modeToG(mode){ const m=MODES.find(x=>x.key===normalizeMode(mode)); return m? m.g : 'WALKING'; }
+/* 일정 사이 이동 줄 (접힌 상태) */
+function moveBar(from, to){
+  const bar=document.createElement('div');
+  bar.className='tmove';
+  const mode=normalizeMode(from.mode);
+  const m=MODES.find(x=>x.key===mode)||MODES[0];
+  const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
+  const km = both? haversineKm(from,to) : null;
 
-function requestRoute(from, to, g){
-  const key = `${from.lat.toFixed(5)},${from.lng.toFixed(5)}|${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${g}|${g==='TRANSIT'? timeBucket():'s'}`;
-  if(routeCache[key]) return routeCache[key];
+  let label = both? fmtMin(estimateMinutes(km, mode)) : '위치 미정';
+  let extra = '';
+  if(mode==='transit' && from.aiRoute){
+    if(from.aiRoute.minutes) label = `약 ${from.aiRoute.minutes}분`;
+    if(from.aiRoute.fare) extra = `<span class="tm-fare">${esc(String(from.aiRoute.fare))}</span>`;
+  }
 
-  const p = new Promise(resolve=>{
-    if(!dirService) return resolve(null);
-    const req = {
-      origin:{lat:from.lat,lng:from.lng},
-      destination:{lat:to.lat,lng:to.lng},
-      travelMode: google.maps.TravelMode[g]
-    };
-    if(g==='TRANSIT') req.transitOptions = { departureTime: new Date() };
-    dirService.route(req, (res, status)=>{
-      if(status!=='OK' || !res.routes[0] || !res.routes[0].legs[0]){
-        delete routeCache[key];            // 실패는 캐시하지 않음 (재시도 가능)
-        if(status!=='ZERO_RESULTS') console.warn('[Directions]', g, status);
-        lastDirStatus = status;
-        return resolve({ ok:false, status });
-      }
-      const route=res.routes[0], lg=route.legs[0];
-      resolve({
-        ok:true,
-        mins: Math.round(lg.duration.value/60),
-        distance: lg.distance? lg.distance.text : null,
-        fare: route.fare? route.fare.text : null,
-        depart: lg.departure_time? lg.departure_time.text : null,
-        departAt: lg.departure_time && lg.departure_time.value ? lg.departure_time.value.getTime() : null,
-        arrive: lg.arrival_time? lg.arrival_time.text : null,
-        overview: (route.overview_path||[]).map(pt=>[pt.lat(), pt.lng()]),
-        steps: (lg.steps||[]).map(st=>{
-          const path = (st.path||[]).map(pt=>[pt.lat(), pt.lng()]);
-          const mins = Math.round((st.duration? st.duration.value:0)/60);
-          if(st.travel_mode==='TRANSIT' && st.transit){
-            const t=st.transit, line=t.line||{};
-            return {
-              kind:'transit', path, mins,
-              name: line.short_name || line.name || '노선',
-              full: line.name || '',
-              vehicle: (line.vehicle && (line.vehicle.type || line.vehicle.name)) || '',
-              color: line.color || null,
-              textColor: line.text_color || null,
-              from: (t.departure_stop||{}).name || '',
-              to: (t.arrival_stop||{}).name || '',
-              depart: t.departure_time? t.departure_time.text : null,
-              departAt: t.departure_time && t.departure_time.value ? t.departure_time.value.getTime() : null,
-              arrive: t.arrival_time? t.arrival_time.text : null,
-              stops: t.num_stops || 0,
-              headsign: t.headsign || ''
-            };
-          }
-          return { kind: st.travel_mode==='WALKING' ? 'walk' : 'drive', path, mins,
-                   dist: st.distance? st.distance.text : '' };
-        })
-      });
-    });
+  bar.innerHTML=`
+    <button type="button" class="tm-add" title="여기에 일정 추가">+</button>
+    <button type="button" class="tm-open">
+      <span class="icon">${iconSvg(m.icon)}</span>
+      <span class="tm-label">${m.label} ${label}</span>
+      ${extra}
+      <span class="tm-caret">⌄</span>
+    </button>
+    <div class="tm-detail" hidden></div>`;
+
+  bar.querySelector('.tm-add').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    openFormAt(bar, null, { time: midTime(from.time, to.time), afterName: from.name, beforeName: to.name });
   });
 
-  routeCache[key] = p;
-  return p;
-}
-
-/* 구글 지도 앱으로 바로 보내는 링크 */
-const GMAP_MODE = { walk:'walking', transit:'transit', taxi:'driving', car:'driving' };
-function gmapsDirUrl(from,to,mode){
-  const m = GMAP_MODE[normalizeMode(mode)] || 'transit';
-  return `https://www.google.com/maps/dir/?api=1`
-    + `&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${m}`;
-}
-
-/* 역·정류장 이름을 좌표로 (구글 → OSM 순서, 결과는 캐시) */
-const stationCache = {};
-async function resolveStation(name){
-  const q = String(name||'').trim();
-  if(!q) return null;
-  if(stationCache[q] !== undefined) return stationCache[q];
-
-  let found = null;
-  if(ensurePlaces()){
-    found = await new Promise(resolve=>{
-      placesService.findPlaceFromQuery(
-        { query: `${q} 삿포로`, fields:['geometry','name'],
-          locationBias: new google.maps.Circle({ center:{lat:SAPPORO.lat,lng:SAPPORO.lng}, radius:80000 }) },
-        (res, status)=>{
-          if(status===google.maps.places.PlacesServiceStatus.OK && res && res[0] && res[0].geometry){
-            resolve([res[0].geometry.location.lat(), res[0].geometry.location.lng()]);
-          } else resolve(null);
-        });
-    });
-  }
-  if(!found){
-    try{
-      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=ko,ja,en&viewbox=139.0,46.0,146.5,41.0&q=${encodeURIComponent(q+' 札幌')}`);
-      const d = await r.json();
-      if(d && d[0]) found = [parseFloat(d[0].lat), parseFloat(d[0].lon)];
-    }catch(e){}
-  }
-  stationCache[q] = found;
-  return found;
-}
-
-/* AI 경로의 각 구간에 좌표를 채워 넣습니다 (지도에 그리기 위함) */
-async function geocodeAiRoute(route, from, to){
-  if(!route || !Array.isArray(route.steps)) return route;
-  for(const st of route.steps){
-    if(!st.fromAt) st.fromAt = await resolveStation(st.from);
-    if(!st.toAt)   st.toAt   = await resolveStation(st.to);
-  }
-  // 양 끝은 실제 일정 좌표로 보정
-  const first=route.steps[0], last=route.steps[route.steps.length-1];
-  if(first && !first.fromAt) first.fromAt=[from.lat,from.lng];
-  if(last  && !last.toAt)    last.toAt=[to.lat,to.lng];
-  return route;
-}
-
-/* ---- 일본 공휴일 (Nager.Date, 키 불필요 · 연 단위 캐시) ---- */
-const holidayCache = {};
-async function jpHolidays(year){
-  if(holidayCache[year]) return holidayCache[year];
-  const lsKey = `jp-holidays:${year}`;
-  try{
-    const raw = localStorage.getItem(lsKey);
-    if(raw){ holidayCache[year]=JSON.parse(raw); return holidayCache[year]; }
-  }catch(e){}
-  try{
-    const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/JP`);
-    if(!res.ok) throw new Error(res.status);
-    const list = await res.json();
-    const map = {};
-    list.forEach(h=>{ map[h.date] = h.localName || h.name; });
-    holidayCache[year]=map;
-    try{ localStorage.setItem(lsKey, JSON.stringify(map)); }catch(e){}
-    return map;
-  }catch(e){
-    holidayCache[year] = {};
-    return holidayCache[year];
-  }
-}
-async function dayContext(iso){
-  if(!iso) return { date:'', weekday:'', dayType:'평일' };
-  const d = new Date(iso+'T00:00:00');
-  const wd = DOW[d.getDay()];
-  const map = await jpHolidays(d.getFullYear());
-  const holiday = map[iso] || null;
-  let dayType = '평일';
-  if(holiday) dayType = `공휴일(${holiday})`;
-  else if(d.getDay()===0) dayType = '일요일';
-  else if(d.getDay()===6) dayType = '토요일';
-  return { date: iso, weekday: wd, dayType, holiday };
-}
-
-/* AI에게 대중교통 경로를 물어봅니다 (참고용 추정) */
-async function askAiRoute(from, to, btn, box){
-  if(!aiUsable()){
-    box.innerHTML = `<div class="rd-none">AI 경로 추정을 쓰려면 AI 연결이 필요해요. ${DISABLED_MSG}</div>`;
-    return;
-  }
-  btn.disabled = true;
-  box.innerHTML = `<div class="ai-route loading">AI에게 경로를 물어보는 중...</div>`;
-
-  const day = currentDay();
-  const ctx = await dayContext(day && day.iso);
-  const payload = {
-    type: 'route',
-    city: '삿포로',
-    from: { name: from.name, place: from.place||'', lat: from.lat, lng: from.lng },
-    to:   { name: to.name,   place: to.place||'',   lat: to.lat,   lng: to.lng },
-    time: from.time || '',
-    date: ctx.date, weekday: ctx.weekday, dayType: ctx.dayType
-  };
-
-  try{
-    let data;
-    if(aiMode()==='proxy'){
-      const res = await fetch(CFG.AI_PROXY_URL, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-      });
-      if(!res.ok) throw new Error('proxy '+res.status);
-      const j = await res.json();
-      data = j.route || j;
+  const openBtn=bar.querySelector('.tm-open');
+  const box=bar.querySelector('.tm-detail');
+  openBtn.addEventListener('click', ()=>{
+    if(box.hidden){
+      box.innerHTML='';
+      box.appendChild(buildLeg(from, to));
+      box.hidden=false; openBtn.classList.add('open');
     } else {
-      const sys = '너는 일본 홋카이도 삿포로 지역의 대중교통에 밝은 안내자야. 출발지에서 목적지까지 지하철·버스·전차를 이용한 경로를 알려줘. 반드시 JSON 객체만 출력하고 다른 텍스트는 쓰지마. 형식: {"summary":"한 줄 요약","minutes":숫자,"fare":"예상 요금(엔)","steps":[{"mode":"도보|지하철|버스|전차","line":"노선명 또는 번호(도보면 빈 문자열)","from":"출발 지점","to":"도착 지점","note":"참고 사항"}],"caution":"주의할 점"}';
-      const usr = `출발: ${from.name}${from.place? ' ('+from.place+')':''}\n도착: ${to.name}${to.place? ' ('+to.place+')':''}\n`
-        + `날짜: ${ctx.date} ${ctx.weekday}요일 (${ctx.dayType})\n출발 시각: ${from.time||'낮'}\n\n`
-        + `해당 요일·공휴일 운행 시간표를 감안해서 소요시간을 잡아줘. 주말·공휴일은 배차 간격이 길어지는 점도 반영해줘.\n`
-        + `삿포로 시내 기준으로 실제 존재하는 노선명과 역 이름을 사용해줘.`;
-      const res = await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+personalKey()},
-        body: JSON.stringify({ model:CFG.OPENAI_MODEL, temperature:0.3,
-          messages:[{role:'system',content:sys},{role:'user',content:usr}] })
-      });
-      if(!res.ok) throw new Error('openai '+res.status);
-      const j = await res.json();
-      const txt=(j.choices&&j.choices[0]&&j.choices[0].message? j.choices[0].message.content:'').replace(/```json|```/g,'').trim();
-      data = JSON.parse(txt);
+      box.hidden=true; openBtn.classList.remove('open');
     }
+  });
+  return bar;
+}
 
-    box.innerHTML = `<div class="ai-route loading">경로를 지도에 표시하는 중...</div>`;
-    await geocodeAiRoute(data, from, to);
-    from.aiRoute = data;          // 저장해두면 친구들 화면에도 같이 보여요
-    markChanged();
-    box.innerHTML = renderAiRoute(data);
-    renderMapForDay();            // 지도 탭에도 즉시 반영
-  }catch(e){
-    box.innerHTML = `<div class="rd-none err">AI 경로를 불러오지 못했어요. 잠시 후 다시 시도해주세요.</div>`;
-  }finally{
-    btn.disabled = false;
+/* 폼 영역은 표를 다시 그릴 때 사라질 수 있어서 항상 이 함수로 가져옵니다 */
+function getFormArea(){
+  let fa = document.getElementById('formArea');
+  if(!fa){
+    fa = document.createElement('div');
+    fa.id = 'formArea';
   }
+  if(!fa.isConnected){
+    const body = document.querySelector('.list-body');
+    if(body) body.appendChild(fa);
+  }
+  return fa;
 }
 
-function renderAiRoute(d){
-  if(!d) return '';
-  const steps = Array.isArray(d.steps)? d.steps : [];
-  const lis = steps.map(st=>{
-    const isWalk = String(st.mode||'').includes('도보');
-    return `<li class="rs ${isWalk?'walk':'transit'}">
-      <div class="rs-line">${isWalk? `<span class="icon">${iconSvg('walk')}</span>`:''}
-        <b>${esc(st.line || st.mode || '')}</b>
-        ${!isWalk && st.mode? `<span class="rs-kind">${esc(st.mode)}</span>`:''}</div>
-      <div class="rs-body">${esc(st.from||'')} <span class="rs-arrow">→</span> ${esc(st.to||'')}
-        ${st.note? ` · ${esc(st.note)}`:''}</div>
-    </li>`;
-  }).join('');
-
-  const head=[];
-  if(d.minutes) head.push(`<span class="rd-dur">약 ${esc(String(d.minutes))}분</span>`);
-  if(d.fare)    head.push(`<span class="rd-fare">${esc(String(d.fare))}</span>`);
-
-  return `<div class="ai-route">
-      <div class="ai-route-tag">AI 추정 경로</div>
-      ${d.summary? `<div class="ai-route-sum">${esc(d.summary)}</div>`:''}
-      ${head.length? `<div class="rd-head">${head.join('<span class="rd-sep">·</span>')}</div>`:''}
-      ${lis? `<ol class="rd-steps">${lis}</ol>`:''}
-      <div class="ai-route-warn">AI가 추정한 경로예요. 지하철·전차 구간은 OpenStreetMap의 실제 선로를 따라
-        지도에 그려지지만, <b>시간표와 요금은 AI 추정</b>이라 실제와 다를 수 있어요.
-        출발 전에 구글 지도에서 한 번 확인해주세요.${d.caution? ` ${esc(d.caution)}`:''}</div>
-    </div>`;
+/* 편집 폼을 해당 줄 바로 아래에 펼칩니다 */
+function openFormAt(anchor, stopId, prefill){
+  const fa=getFormArea();
+  if(fa && anchor && anchor.parentNode) anchor.after(fa);
+  document.querySelectorAll('.trow.open').forEach(r=>r.classList.remove('open'));
+  if(anchor && anchor.classList.contains('trow')) anchor.classList.add('open');
+  openForm(stopId, prefill);
 }
 
-/* =========================================================
-   일정표 — 구간 카드
-   ========================================================= */
 /* 하루 요약 — 확정/선택 개수와 이동시간 합계 */
 function renderDaySummary(day, el){
   const all = day.stops;
@@ -1758,19 +1785,26 @@ async function fillLegDetail(from,to,legEl,km){
     if(cur==='transit'){
       // 구글 Directions API는 일본 대중교통을 지원하지 않습니다.
       const est = fmtMin(estimateMinutes(km,'transit'));
+      const saved = from.aiRoute;
       detailEl.innerHTML = `
-        <div class="rd-none">
-          구글 경로 안내는 <b>일본 대중교통을 지원하지 않아요.</b>
-          아래 버튼으로 구글 지도 앱에서 실제 노선과 요금을 확인할 수 있어요.
-          <div class="rd-est">거리 기반 추정 ${est}</div>
-        </div>
         <div class="rd-actions">
           ${gmapLink}
           <button type="button" class="ai-btn" data-ai-route>
-            <span class="icon">${iconSvg('star')}</span>AI로 경로 추정
+            <span class="icon">${iconSvg('star')}</span>${saved? 'AI 경로 다시 받기':'AI로 경로 추정'}
           </button>
         </div>
-        <div class="ai-route-box">${from.aiRoute? renderAiRoute(from.aiRoute):''}</div>`;
+        <div class="ai-route-box">${saved? renderAiRoute(saved):''}</div>
+        <button type="button" class="rd-why" data-why>
+          거리 기반 추정 ${est} · 왜 노선이 안 나오나요?
+        </button>
+        <div class="rd-why-box" hidden>
+          구글 경로 안내는 일본만 대중교통을 지원하지 않아요. 그래서 노선·시각표·요금을
+          자동으로 가져올 수 없어서, 구글 지도 앱으로 넘어가 확인하거나 AI 추정을 쓰는 방식이에요.
+        </div>`;
+
+      const why = detailEl.querySelector('[data-why]');
+      const whyBox = detailEl.querySelector('.rd-why-box');
+      why.addEventListener('click', ()=>{ whyBox.hidden = !whyBox.hidden; why.classList.toggle('open', !whyBox.hidden); });
 
       const btn = detailEl.querySelector('[data-ai-route]');
       const box = detailEl.querySelector('.ai-route-box');
@@ -1945,26 +1979,30 @@ function openFlightForm(){
   closeForm(); dayFormOpen=true;
   const f = TRIP.flights || {};
   const fin = f.in||{}, fout = f.out||{};
-  document.getElementById('formArea').innerHTML=`
+  getFormArea().innerHTML=`
     <div class="form-card">
       <h3>항공편</h3>
       <p class="hint" style="margin:0 0 14px;">도착·출발 시각을 넣으면 첫날과 마지막 날 공항 일정이 자동으로 만들어져요.</p>
 
-      <div class="fl-sec">입국 (도착편)</div>
+      <div class="fl-sec">입국 (도착편)
+        <label class="fl-use"><input type="checkbox" id="fi_use" ${fin.time?'checked':''}> 사용</label>
+      </div>
       <label class="first">편명</label>
       <input type="text" id="fi_no" value="${esc(fin.no||'')}" placeholder="예: LJ231">
       <label>도착 공항</label>
       <input type="text" id="fi_ap" value="${esc(fin.airport||'신치토세 공항')}" placeholder="신치토세 공항">
       <label>착륙 시각</label>
-      <input type="time" id="fi_time" value="${esc(fin.time||'')}">
+      ${timeFieldHtml('fi_time', fin.time||'14:00')}
 
-      <div class="fl-sec" style="margin-top:18px;">출국 (귀국편)</div>
+      <div class="fl-sec" style="margin-top:18px;">출국 (귀국편)
+        <label class="fl-use"><input type="checkbox" id="fo_use" ${fout.time?'checked':''}> 사용</label>
+      </div>
       <label class="first">편명</label>
       <input type="text" id="fo_no" value="${esc(fout.no||'')}" placeholder="예: LJ232">
       <label>출발 공항</label>
       <input type="text" id="fo_ap" value="${esc(fout.airport||'신치토세 공항')}" placeholder="신치토세 공항">
       <label>출발 시각</label>
-      <input type="time" id="fo_time" value="${esc(fout.time||'')}">
+      ${timeFieldHtml('fo_time', fout.time||'18:00')}
 
       <p class="hint">입국은 착륙 후 <b>${FLIGHT_RULE.arriveBuffer}분</b>(입국심사·수하물),
         출국은 출발 <b>${Math.round(FLIGHT_RULE.checkinLead/60)}시간</b> 전 공항 도착으로 잡습니다.</p>
@@ -1976,16 +2014,18 @@ function openFlightForm(){
       </div>
     </div>`;
 
+  bindTimeField('fi_time'); bindTimeField('fo_time');
   document.getElementById('fl_save').addEventListener('click', saveFlights);
   document.getElementById('fl_cancel').addEventListener('click', ()=> closeDayForm());
   const c=document.getElementById('fl_clear');
   if(c) c.addEventListener('click', clearFlights);
-  document.getElementById('formArea').scrollIntoView({behavior:'smooth', block:'start'});
+  getFormArea().scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 async function saveFlights(){
   const v=id=>document.getElementById(id).value.trim();
-  const inTime=v('fi_time'), outTime=v('fo_time');
+  const inTime  = document.getElementById('fi_use').checked ? v('fi_time') : '';
+  const outTime = document.getElementById('fo_use').checked ? v('fo_time') : '';
   if(!inTime && !outTime){ alert('도착 또는 출발 시각을 하나 이상 입력해주세요.'); return; }
 
   const prev = TRIP.flights || {};
@@ -2100,7 +2140,7 @@ function openStayForm(){
   const own = stayIsOwn(idx);
   const nextDay = TRIP.days[idx+1];
 
-  document.getElementById('formArea').innerHTML=`
+  getFormArea().innerHTML=`
     <div class="form-card">
       <h3>${fmtDate(day.iso)} (${fmtDow(day.iso)}) 밤에 묵는 숙소</h3>
       <p class="hint" style="margin:0 0 14px;">
@@ -2137,7 +2177,7 @@ function openStayForm(){
   document.getElementById('s_cancel').addEventListener('click', ()=> closeDayForm());
   const cl=document.getElementById('s_clear');
   if(cl) cl.addEventListener('click', clearStay);
-  document.getElementById('formArea').scrollIntoView({behavior:'smooth', block:'start'});
+  getFormArea().scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function saveStay(){
@@ -2189,7 +2229,7 @@ function openDayForm(mode){
   const editing = mode==='edit' ? currentDay() : null;
   if(mode==='edit' && !editing){ toast('편집할 날짜가 없어요'); dayFormOpen=false; return; }
   const defIso = editing? editing.iso : nextSuggestedIso();
-  document.getElementById('formArea').innerHTML=`
+  getFormArea().innerHTML=`
     <div class="form-card">
       <h3>${editing? '날짜 편집':'날짜 추가'}</h3>
       <label class="first">날짜</label>
@@ -2206,7 +2246,7 @@ function openDayForm(mode){
   document.getElementById('d_save').addEventListener('click', ()=> saveDay(editing));
   document.getElementById('d_cancel').addEventListener('click', ()=>{ closeDayForm(); });
   if(editing) document.getElementById('d_delete').addEventListener('click', ()=> deleteDay(editing));
-  document.getElementById('formArea').scrollIntoView({behavior:'smooth',block:'start'});
+  getFormArea().scrollIntoView({behavior:'smooth',block:'start'});
 }
 function nextSuggestedIso(){
   if(!TRIP.days.length) return new Date().toISOString().slice(0,10);
@@ -2247,14 +2287,14 @@ function openForm(stopId, prefill){
   const ed = stopId? day.stops.find(x=>x.id===stopId):null;
   const pf = prefill || {};
   const isOpt = ed ? !!ed.opt : false;
-  document.getElementById('formArea').innerHTML=`
+  getFormArea().innerHTML=`
     <div class="form-card">
       <h3>${ed? '일정 수정':'일정 추가'}</h3>
       ${pf.afterName? `<p class="hint" style="margin:-6px 0 14px;"><b>${esc(pf.afterName)}</b> 다음, <b>${esc(pf.beforeName)}</b> 앞에 들어갑니다.</p>`:''}
       <label class="first">이름</label>
       <input type="text" id="f_name" value="${ed? esc(ed.name):''}" placeholder="장소 이름">
       <label>시간</label>
-      <input type="time" id="f_time" value="${ed? ed.time : (pf.time||'')}">
+      ${timeFieldHtml('f_time', ed? ed.time : (pf.time||'09:00'))}
       <label>상태</label>
       <div class="seg-toggle" id="f_optWrap">
         <button type="button" class="seg ${isOpt?'':'on'}" data-opt="0">확정</button>
@@ -2282,6 +2322,7 @@ function openForm(stopId, prefill){
     </div>`;
   if(ed && !ed.tbd) geoPicked={lat:ed.lat,lng:ed.lng,label:ed.place||ed.name};
   miniMap=null; miniMarker=null; acToken=null; clearTimeout(searchTimer);
+  bindTimeField('f_time');
   document.querySelectorAll('#f_optWrap .seg').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelectorAll('#f_optWrap .seg').forEach(x=>x.classList.remove('on'));
@@ -2295,9 +2336,13 @@ function openForm(stopId, prefill){
   document.getElementById('f_save').addEventListener('click', saveForm);
   document.getElementById('f_cancel').addEventListener('click', closeForm);
   if(ed) document.getElementById('f_delete').addEventListener('click', ()=> deleteStop(stopId));
-  document.getElementById('formArea').scrollIntoView({behavior:'smooth',block:'start'});
+  getFormArea().scrollIntoView({behavior:'smooth',block:'start'});
 }
-function closeForm(){ editingStopId=null; geoPicked=null; miniMap=null; miniMarker=null; const a=document.getElementById('formArea'); if(a && !dayFormOpen) a.innerHTML=''; }
+function closeForm(){
+  editingStopId=null; geoPicked=null; miniMap=null; miniMarker=null;
+  document.querySelectorAll('.trow.open').forEach(r=>r.classList.remove('open'));
+  const a=document.getElementById('formArea'); if(a && !dayFormOpen) a.innerHTML='';
+}
 
 /* ---------- 위치 검색 ----------
    1순위: 구글 장소 검색 (키가 있을 때, 한국어 검색에 가장 강함)
@@ -2319,6 +2364,153 @@ function newToken(){
     acToken = new google.maps.places.AutocompleteSessionToken();
   }
   return acToken;
+}
+
+/* =========================================================
+   시간 입력 — 탭으로 고르는 방식 (모바일 키패드 없이)
+   ========================================================= */
+function clampTime(hhmm){
+  const m=/^(\d{1,2}):(\d{2})$/.exec(hhmm||'');
+  if(!m) return '09:00';
+  const h=Math.min(23,Math.max(0,+m[1])), mi=Math.min(59,Math.max(0,+m[2]));
+  return `${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}`;
+}
+
+/* 12시간제 / 24시간제 — 기기에 저장되는 개인 설정 */
+let TIME_FMT = (()=>{ try{ return localStorage.getItem('sapporo:timeFmt')==='12' ? 12 : 24; }catch(e){ return 24; } })();
+function setTimeFmt(v){
+  TIME_FMT = v;
+  try{ localStorage.setItem('sapporo:timeFmt', String(v)); }catch(e){}
+}
+
+function to12(hhmm){
+  const [H,M] = clampTime(hhmm).split(':').map(Number);
+  const pm = H >= 12;
+  let h12 = H % 12; if(h12===0) h12 = 12;
+  return { h12, min:M, pm };
+}
+function from12(h12, min, pm){
+  let H = h12 % 12;
+  if(pm) H += 12;
+  return `${String(H).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+}
+/* 화면에 보여줄 문자열 */
+function displayTime(hhmm){
+  if(TIME_FMT===24) return clampTime(hhmm);
+  const t = to12(hhmm);
+  return `${String(t.h12).padStart(2,'0')}:${String(t.min).padStart(2,'0')}`;
+}
+/* 목록·카드 등에서 쓰는 표기 (오전/오후 포함) */
+function fmtClock(hhmm){
+  if(TIME_FMT===24) return clampTime(hhmm);
+  const t = to12(hhmm);
+  return `${t.pm?'오후':'오전'} ${t.h12}:${String(t.min).padStart(2,'0')}`;
+}
+
+/* 숫자 입력 해석 — 현재 선택된 형식 기준 */
+function digitsToTime(d, pmHint){
+  const s=String(d||'').replace(/\D/g,'').slice(0,4);
+  if(!s) return null;
+  let h, m;
+  if(s.length<=2){ h=+s; m=0; }
+  else if(s.length===3){ h=+s.slice(0,1); m=+s.slice(1); }
+  else { h=+s.slice(0,2); m=+s.slice(2); }
+  if(m>59) return null;
+
+  if(TIME_FMT===24){
+    if(h>23) return null;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  }
+  if(h<1 || h>12) return null;
+  return from12(h, m, !!pmHint);
+}
+
+function timeFieldHtml(id, value){
+  const v = clampTime(value || '09:00');
+  const t = to12(v);
+  return `
+    <div class="tf ${TIME_FMT===12?'h12':'h24'}" data-tf="${id}">
+      <input type="hidden" id="${id}" value="${v}">
+      <div class="tf-box">
+        <input class="tf-input" type="text" inputmode="numeric" pattern="[0-9]*"
+               maxlength="5" value="${displayTime(v)}" placeholder="${TIME_FMT===12?'230':'1430'}"
+               autocomplete="off" enterkeyhint="done">
+      </div>
+      <div class="tf-ctrl">
+        <div class="tf-seg tf-ampm">
+          <button type="button" class="${t.pm?'':'on'}" data-ampm="am">오전</button>
+          <button type="button" class="${t.pm?'on':''}" data-ampm="pm">오후</button>
+        </div>
+        <div class="tf-seg tf-fmt">
+          <button type="button" class="${TIME_FMT===24?'on':''}" data-fmt="24">24h</button>
+          <button type="button" class="${TIME_FMT===12?'on':''}" data-fmt="12">12h</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindTimeField(id){
+  const root = document.querySelector(`.tf[data-tf="${id}"]`);
+  if(!root) return;
+  const hidden = document.getElementById(id);
+  const box = root.querySelector('.tf-input');
+
+  const paint = ()=>{
+    const t = to12(hidden.value);
+    box.value = displayTime(hidden.value);
+    box.placeholder = TIME_FMT===12 ? '230' : '1430';
+    root.classList.toggle('h12', TIME_FMT===12);
+    root.classList.toggle('h24', TIME_FMT===24);
+    root.querySelectorAll('[data-ampm]').forEach(b=>
+      b.classList.toggle('on', (b.dataset.ampm==='pm') === t.pm));
+    root.querySelectorAll('[data-fmt]').forEach(b=>
+      b.classList.toggle('on', +b.dataset.fmt === TIME_FMT));
+  };
+
+  const isPm = ()=> !!root.querySelector('[data-ampm="pm"].on');
+
+  box.addEventListener('input', ()=>{
+    const d = box.value.replace(/\D/g,'').slice(0,4);
+    box.value = d.length>2 ? `${d.slice(0,d.length-2)}:${d.slice(-2)}` : d;
+    const t = digitsToTime(box.value, isPm());
+    if(t){ hidden.value = t; root.classList.remove('bad'); }
+    else { root.classList.add('bad'); }
+  });
+  box.addEventListener('focus', ()=> box.select());
+  box.addEventListener('blur', ()=>{
+    const t = digitsToTime(box.value, isPm());
+    if(t){ hidden.value = t; root.classList.remove('bad','shake'); paint(); return; }
+    root.classList.add('bad','shake');
+    if(navigator.vibrate) navigator.vibrate(18);
+    setTimeout(()=>{
+      paint();
+      root.classList.remove('shake');
+      root.classList.add('reverted');
+      setTimeout(()=> root.classList.remove('bad','reverted'), 420);
+    }, 330);
+  });
+
+  root.querySelectorAll('[data-ampm]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const t = to12(hidden.value);
+      hidden.value = from12(t.h12, t.min, b.dataset.ampm==='pm');
+      paint();
+    });
+  });
+  root.querySelectorAll('[data-fmt]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      setTimeFmt(+b.dataset.fmt);
+      document.querySelectorAll('.tf').forEach(el=>{
+        el.classList.toggle('h12', TIME_FMT===12);
+        el.classList.toggle('h24', TIME_FMT===24);
+      });
+      paint();
+      renderScheduleScreen();       // 목록 표기도 함께 바꿔요
+      renderCarousel();
+    });
+  });
+
+  paint();
 }
 
 /* ---- 결과 목록 렌더 ---- */
@@ -2541,7 +2733,7 @@ function saveForm(){
   day.stops.sort((a,b)=>a.time.localeCompare(b.time));
   markChanged();
   editingStopId=null; geoPicked=null;
-  document.getElementById('formArea').innerHTML='';
+  getFormArea().innerHTML='';
   activeStopId=null; renderScheduleScreen();
   toast('저장했어요');
 }
@@ -2553,7 +2745,7 @@ function deleteStop(id){
   day.stops=day.stops.filter(x=>x.id!==id);
   markChanged();
   editingStopId=null;
-  document.getElementById('formArea').innerHTML='';
+  getFormArea().innerHTML='';
   renderScheduleScreen();
 }
 
@@ -2602,7 +2794,12 @@ function switchScreen(name){
   if(name==='prep'){ renderPrep(); }
 }
 document.querySelectorAll('.navbtn').forEach(b=> b.addEventListener('click', ()=> switchScreen(b.dataset.screen)));
-document.getElementById('addStopBtn').addEventListener('click', ()=> openForm(null));
+document.getElementById('addStopBtn').addEventListener('click', ()=>{
+  const fa=getFormArea();
+  document.querySelector('.list-body').appendChild(fa);
+  document.querySelectorAll('.trow.open').forEach(r=>r.classList.remove('open'));
+  openForm(null);
+});
 document.getElementById('addDayBtn').addEventListener('click', ()=> openDayForm('add'));
 document.getElementById('editDayBtn').addEventListener('click', ()=> openDayForm('edit'));
 document.getElementById('stayBtn').addEventListener('click', openStayForm);
@@ -2619,14 +2816,17 @@ document.getElementById('statusBtn').addEventListener('click', ()=>{
     ['구글 지도', engine==='google' ? '사용 중' : '기본 지도', engine==='google'],
     ['구글 경로 안내', HAS_DIR? '사용 중':'비활성화', HAS_DIR],
     ['AI 장소 추천', aiLabelMap[aiMode()], aiUsable()],
-    ['친구들과 실시간 공유', HAS_SYNC? '사용 중':'비활성화', HAS_SYNC]
+    ['친구들과 실시간 공유', HAS_SYNC? '사용 중':'비활성화', HAS_SYNC],
+    ['노선 데이터(OSM)', osmStatus, !!(osmLines && osmLines.length)]
   ];
   document.getElementById('statusList').innerHTML = rows.map(([k,label,on])=>
     `<div class="status-row"><span class="k">${k}</span><span class="v ${on?'on':'off'}">${label}</span></div>`
   ).join('')
     + (lastDirStatus && lastDirStatus!=='OK' && lastDirStatus!=='ZERO_RESULTS'
         ? `<p class="hint err-hint">최근 경로 조회 응답: <code>${esc(lastDirStatus)}</code><br>${dirStatusMsg(lastDirStatus)}</p>` : '')
-    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`;
+    + `<p class="hint">비활성화된 기능은 <code>config.js</code>에 값을 입력하면 자동으로 켜집니다. 지도 키가 없으면 기본 지도(OpenStreetMap)로 표시됩니다.</p>`
+    + backupListHtml();
+  bindBackupButtons();
   document.getElementById('statusModalBg').classList.add('open');
 });
 
@@ -2657,6 +2857,33 @@ document.getElementById('shareBtn').addEventListener('click', ()=>{
   });
   document.getElementById('shareModalBg').classList.add('open');
 });
+
+/* ---- 이전 일정 복구 ---- */
+function backupListHtml(){
+  const list = readBackups();
+  if(!list.length) return '';
+  const fmt = (ts)=>{
+    const d=new Date(ts);
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+  return `<div class="bk-wrap">
+      <div class="bk-title">이전 일정으로 되돌리기</div>
+      <p class="hint" style="margin:0 0 10px;">일정이 바뀌기 직전 상태를 최근 8개까지 이 기기에 보관해요.</p>
+      ${list.map((b,i)=>`
+        <div class="bk-row">
+          <span class="bk-meta"><b>${fmt(b.at)}</b> · 일정 ${b.count}개${b.why? ` · ${esc(b.why)}`:''}</span>
+          <button type="button" class="bk-btn" data-bk="${i}">되돌리기</button>
+        </div>`).join('')}
+    </div>`;
+}
+function bindBackupButtons(){
+  document.querySelectorAll('[data-bk]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      if(!confirm('이 시점의 일정으로 되돌릴까요? 지금 내용은 백업에 남습니다.')) return;
+      restoreBackup(Number(b.dataset.bk));
+    });
+  });
+}
 
 /* ================= AI ================= */
 const aiModalBg=document.getElementById('aiModalBg');
@@ -2838,8 +3065,6 @@ async function init(){
   // 예전 버전 데이터 호환: 지하철/버스 → 대중교통
   TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
   sortDays();
-  ensureFlightStops();
-  ensureStayStarts();
   activeDayId = TRIP.days.length? TRIP.days[0].id : null;
   setSyncLabel(HAS_SYNC? '동기화 중...' : '내 기기 저장');
 
@@ -2849,13 +3074,19 @@ async function init(){
   refreshAll();
   switchScreen('map');
 
-  // 2) 클라우드 동기화
+  // 2) 서버 내용을 먼저 받아온 뒤에 자동 보정을 적용합니다
+  //    (순서가 바뀌면 오래된 내 사본이 서버를 덮어써서 일정이 사라질 수 있어요)
   if(HAS_SYNC){
     await pullRemote(true);
-    if(!TRIP.updatedAt){ markChanged(); }
+    syncReady = true;
     syncTimer = setInterval(()=> pullRemote(false), 15000);
     document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pullRemote(false); });
   }
+
+  pushBackup(TRIP, '앱 시작');
+  const fixed = ensureFlightStops() | ensureStayStarts();
+  if(fixed){ refreshAll(); }
+  if(HAS_SYNC && !TRIP.updatedAt) markChanged();
 
   // 3) 앱처럼 쓰기 위한 서비스워커
   if('serviceWorker' in navigator){
