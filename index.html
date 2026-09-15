@@ -235,6 +235,9 @@
   .sched-days .daychip{ box-shadow:none; background:var(--tint); }
   .sched-days .daychip.active{ background:var(--red); color:#fff; }
   .list-body{ padding:16px 18px 120px; }
+  .empty-note.err{ color:var(--red); }
+  .err-code{ display:inline-block; margin:8px 0; font-family:var(--font-mono); font-size:11px;
+    background:var(--red-soft); border-radius:6px; padding:4px 8px; word-break:break-all; }
   .empty-note{ background:#fff; border-radius:var(--r-md); padding:26px 18px; text-align:center;
     color:var(--muted); font-size:13px; line-height:1.7; box-shadow:0 2px 10px rgba(26,26,30,.05); }
 
@@ -1496,6 +1499,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 /* ================= DAY CHIPS ================= */
 function renderDayChips(containerId, afterClick){
   const wrap=document.getElementById(containerId);
+  if(!wrap){ console.warn('[일정] 날짜 칩 영역을 찾지 못했어요:', containerId); return; }
   wrap.innerHTML='';
   TRIP.days.forEach(d=>{
     const el=document.createElement('button');
@@ -1512,13 +1516,29 @@ function renderDayChips(containerId, afterClick){
 
 /* ================= SCHEDULE ================= */
 function renderScheduleScreen(){
+  try{ renderScheduleScreenInner(); }
+  catch(err){
+    console.error('[일정표 렌더 실패]', err);
+    const wrap=document.getElementById('stopListEdit');
+    if(wrap){
+      wrap.innerHTML = `<div class="empty-note err">
+        일정표를 그리는 중 문제가 생겼어요.<br>
+        <span class="err-code">${esc(String(err && err.message || err))}</span><br>
+        지도 탭의 일정은 그대로 있으니 안심하세요. 이 메시지를 알려주시면 고칠 수 있어요.</div>`;
+    }
+  }
+}
+
+function renderScheduleScreenInner(){
   const day=currentDay();
-  document.getElementById('schedTitle').textContent = day? `${fmtDate(day.iso)} (${fmtDow(day.iso)}) · ${day.label}` : '일정표';
+  const titleEl=document.getElementById('schedTitle');
+  if(titleEl) titleEl.textContent = day? `${fmtDate(day.iso)} (${fmtDow(day.iso)}) · ${day.label}` : '일정표';
   renderDayChips('daybar-sched', ()=>{ closeForm(); closeDayForm(); renderScheduleScreen(); });
 
   const flLb=document.getElementById('flightLabel');
   const flBtn=document.getElementById('flightBtn');
   const F=TRIP.flights;
+  if(flLb && flBtn){
   if(F && (F.in||F.out)){
     const parts=[];
     if(F.in)  parts.push(`입국 ${F.in.time}`);
@@ -1529,11 +1549,13 @@ function renderScheduleScreen(){
     flLb.textContent='항공편 입력하기';
     flBtn.classList.remove('set');
   }
+  }
 
   const stayLb=document.getElementById('stayLabel');
   const stayBtn=document.getElementById('stayBtn');
   const dIdx = TRIP.days.findIndex(x=>x.id===activeDayId);
   const dStay = dIdx>=0 ? stayForDayIndex(dIdx) : null;
+  if(stayLb && stayBtn){
   if(dStay){
     stayLb.innerHTML = `<b>오늘 밤</b> ${esc(dStay.name)}`
       + (stayIsOwn(dIdx)? '' : ' <span class="stay-inherit">이어받음</span>');
@@ -1542,14 +1564,21 @@ function renderScheduleScreen(){
     stayLb.textContent = '숙소 설정하기';
     stayBtn.classList.remove('set');
   }
+  }
 
-  const wrap=document.getElementById('stopListEdit');
+  const body = document.querySelector('.list-body');
+  let wrap=document.getElementById('stopListEdit');
+  if(!wrap && body){ wrap=document.createElement('div'); wrap.id='stopListEdit'; body.prepend(wrap); }
   // 폼이 표 안에 들어가 있으면 먼저 밖으로 빼둡니다 (표를 비울 때 같이 지워지지 않도록)
   const faKeep = document.getElementById('formArea');
-  const body = document.querySelector('.list-body');
   if(faKeep && body && faKeep.parentNode !== body) body.appendChild(faKeep);
-  wrap.innerHTML='';
-  const sumEl=document.getElementById('daySummary');
+  if(wrap) wrap.innerHTML='';
+  let sumEl=document.getElementById('daySummary');
+  if(!sumEl){
+    sumEl=document.createElement('div'); sumEl.className='day-summary'; sumEl.id='daySummary';
+    const hdr=document.querySelector('#screen-schedule .sec-header');
+    if(hdr) hdr.appendChild(sumEl);
+  }
   if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; sumEl.innerHTML=''; return; }
 
   renderDaySummary(day, sumEl);
@@ -3040,6 +3069,12 @@ function addSuggestion(item){
   document.getElementById('f_cat').value = Object.keys(CATS).includes(item.category)? item.category:'관광';
   document.getElementById('f_geoQuery').value=item.name+' 삿포로';
 }
+
+/* 예상치 못한 오류를 조용히 넘기지 않도록 */
+window.addEventListener('error', (e)=>{
+  console.error('[오류]', e.message);
+  if(typeof toast==='function') toast('오류가 발생했어요: '+String(e.message).slice(0,60));
+});
 
 /* ================= INIT ================= */
 async function init(){
