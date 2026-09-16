@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#E03B4B" />
+<meta name="theme-color" content="#FFFFFF" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#FFFFFF" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="삿포로" />
@@ -41,7 +42,7 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   button, .trow, .place-card, .prep-item, .geo-result{ touch-action:manipulation; }
   html,body{margin:0;padding:0;height:100%;}
-  body{ background:#DCDCE0; color:var(--ink); font-family:var(--font-body);
+  body{ background:#FFFFFF; color:var(--ink); font-family:var(--font-body);
     -webkit-font-smoothing:antialiased; overscroll-behavior:none; }
   button{ font-family:inherit; letter-spacing:-.01em;
     transition:opacity .18s var(--ease), background .2s var(--ease), color .2s var(--ease), transform .2s var(--ease); }
@@ -68,7 +69,11 @@
   .pin-wrap{ transition:transform .18s ease; }
   .app{ max-width:520px; margin:0 auto; height:100vh; height:100dvh;
     background:var(--paper); display:flex; flex-direction:column;
-    position:relative; overflow:hidden; box-shadow:0 0 48px rgba(0,0,0,.18); }
+    position:relative; overflow:hidden; }
+  @media (min-width:560px){
+    body{ background:#DCDCE0; }
+    .app{ box-shadow:0 0 48px rgba(0,0,0,.18); }
+  }
   .icon{ display:inline-flex; width:17px; height:17px; }
   .icon svg{ width:100%; height:100%; }
   /* .icon 래퍼 없이 직접 넣은 svg도 부모 크기를 넘지 않도록 */
@@ -77,15 +82,19 @@
   .screen.active{ display:flex; }
 
   /* ===== MAP ===== */
-  html{ background:#F5F5F8; }
+  html{ background:#FFFFFF; }   /* 홈 화면 앱의 상태바 영역 색이 됩니다 */
   #screen-map{ overflow:hidden; background:#E9E9ED; }
+  /* 상태바 아래 경계가 도드라지지 않도록 지도 위에 흰색이 부드럽게 깔립니다 */
+  #screen-map::before{ content:''; position:absolute; top:0; left:0; right:0; z-index:400;
+    height:calc(10px + env(safe-area-inset-top, 0px)); pointer-events:none;
+    background:linear-gradient(#fff, rgba(255,255,255,0)); }
   #map, #gmap{ position:absolute; inset:0; }
   #gmap{ display:none; }
   .leaflet-tile-pane{ filter:grayscale(78%) contrast(1.05) brightness(1.05); }
   .leaflet-control-attribution{ display:none; }
 
   .float-head{ position:absolute; top:0; left:0; right:0; z-index:500;
-    padding:calc(16px + env(safe-area-inset-top, 0px)) 12px 0;
+    padding:max(14px, calc(8px + env(safe-area-inset-top, 0px))) 12px 0;
     display:flex; flex-direction:column; gap:10px; pointer-events:none; }
   .float-head > *{ pointer-events:auto; }
 
@@ -164,7 +173,7 @@
 
   /* ===== SCHEDULE ===== */
   #screen-schedule{ overflow-y:auto; background:#F5F5F8; }
-  .sec-header{ padding:calc(26px + env(safe-area-inset-top, 0px)) 16px 14px; background:rgba(255,255,255,.94);
+  .sec-header{ padding:max(22px, calc(14px + env(safe-area-inset-top, 0px))) 16px 14px; background:rgba(255,255,255,.94);
     backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
     position:sticky; top:0; z-index:10; border-bottom:.5px solid rgba(0,0,0,.08); }
   .sec-title-row{ display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; }
