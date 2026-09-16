@@ -71,6 +71,8 @@
     position:relative; overflow:hidden; box-shadow:0 0 48px rgba(0,0,0,.18); }
   .icon{ display:inline-flex; width:17px; height:17px; }
   .icon svg{ width:100%; height:100%; }
+  /* .icon 래퍼 없이 직접 넣은 svg도 부모 크기를 넘지 않도록 */
+  span > svg:only-child{ max-width:100%; max-height:100%; }
   .screen{ flex:1; min-height:0; display:none; flex-direction:column; position:relative; }
   .screen.active{ display:flex; }
 
@@ -83,7 +85,7 @@
   .leaflet-control-attribution{ display:none; }
 
   .float-head{ position:absolute; top:0; left:0; right:0; z-index:500;
-    padding:calc(12px + env(safe-area-inset-top, 0px)) 12px 0;
+    padding:calc(16px + env(safe-area-inset-top, 0px)) 12px 0;
     display:flex; flex-direction:column; gap:10px; pointer-events:none; }
   .float-head > *{ pointer-events:auto; }
 
@@ -162,10 +164,10 @@
 
   /* ===== SCHEDULE ===== */
   #screen-schedule{ overflow-y:auto; background:#F5F5F8; }
-  .sec-header{ padding:calc(18px + env(safe-area-inset-top, 0px)) 16px 13px; background:rgba(255,255,255,.94);
+  .sec-header{ padding:calc(26px + env(safe-area-inset-top, 0px)) 16px 14px; background:rgba(255,255,255,.94);
     backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
     position:sticky; top:0; z-index:10; border-bottom:.5px solid rgba(0,0,0,.08); }
-  .sec-title-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .sec-title-row{ display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; }
   .wx-line{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);
     margin-bottom:12px; letter-spacing:-.01em; min-height:18px; }
   .wx-ico{ font-size:14px; }
@@ -174,7 +176,8 @@
   .wx-sep{ color:var(--muted-2); }
   .wx-pop{ color:var(--c-move); font-weight:500; }
   .wx-none{ color:var(--muted-2); }
-  .sec-header h1{ font-size:26px; font-weight:700; margin:0; letter-spacing:-.03em; flex:1; min-width:0; }
+  .sec-header h1{ font-size:26px; font-weight:700; margin:0; letter-spacing:-.03em; flex:1; min-width:0;
+    line-height:1.28; padding-top:2px; }
   .h1-emoji{ margin-right:8px; font-size:23px; vertical-align:-1px; }
   .mini-btn{ flex:0 0 auto; border:none; background:var(--fill); color:var(--ink);
     border-radius:var(--r-ctl); padding:9px 14px; font-size:13px; font-weight:500; cursor:pointer;
@@ -291,7 +294,7 @@
   .tf-hint{ position:absolute; right:13px; top:50%; transform:translateY(-50%);
     font-size:10.5px; color:var(--muted-2); pointer-events:none; }
   /* 접이식 여행 설정 */
-  .mini-btn.ghost{ background:var(--fill); border-color:transparent; color:var(--muted); }
+  .mini-btn.ghost{ background:var(--fill); border-color:transparent; color:var(--muted); margin-top:3px; }
   .mini-btn.on{ background:var(--ink); color:#fff; border-color:var(--ink); }
   .trip-set{ margin-bottom:12px; }
   .set-actions{ display:flex; gap:7px; }
@@ -387,7 +390,7 @@
     font-size:13px; font-weight:500; letter-spacing:-.01em; }
   .tm-ico{ flex:0 0 26px; width:26px; height:26px; border-radius:8px;
     display:flex; align-items:center; justify-content:center; }
-  .tm-ico .icon{ width:14px; height:14px; }
+  .tm-ico > svg, .tm-ico .icon{ width:15px; height:15px; display:block; }
   .tm-label{ flex:1; min-width:0; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tm-label b{ color:var(--ink); font-weight:600; }
   .tm-fare{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
