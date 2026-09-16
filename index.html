@@ -485,6 +485,7 @@
   .rs.walk .rs-body{ color:var(--muted-2); }
 
   /* 지도 범례 */
+  .map-legend[hidden]{ display:none; }
   .map-legend{ flex:0 1 auto; min-width:0; overflow-x:auto; scrollbar-width:none;
     background:rgba(255,255,255,.84); backdrop-filter:saturate(180%) blur(20px);
     -webkit-backdrop-filter:saturate(180%) blur(20px);
@@ -728,13 +729,7 @@
 
     <div class="bottom-stack">
       <div class="bottom-row">
-        <div class="map-legend" id="mapLegend">
-          <span><i class="lg-line walk"></i>도보</span>
-          <span><i class="lg-line transit"></i>대중교통</span>
-          <span><i class="lg-line drive"></i>차량</span>
-          <span><i class="lg-line ai"></i>AI 추정</span>
-          <span><i class="lg-line osm"></i>실제 노선</span>
-        </div>
+        <div class="map-legend" id="mapLegend" hidden></div>
         <button class="ai-fab" id="aiFab"><span class="icon" id="aiFabIcon"></span> AI 추천</button>
       </div>
       <div class="carousel" id="carousel"></div>
@@ -1234,7 +1229,29 @@ function pinHtml(num, active, multi, color){
     ${badge}</div>`;
 }
 let lRoutes=[], gRoutes=[], routeToken=0;
+let drawnKinds = new Set();
+
+const LEGEND_ITEMS = {
+  walk:    ['도보','walk'],
+  transit: ['대중교통','transit'],
+  drive:   ['차량','drive'],
+  ai:      ['AI 추정','ai'],
+  osm:     ['실제 노선','osm']
+};
+function renderLegend(){
+  const el=document.getElementById('mapLegend');
+  if(!el) return;
+  const keys=[...drawnKinds];
+  if(!keys.length){ el.hidden=true; el.innerHTML=''; return; }
+  el.hidden=false;
+  el.innerHTML = keys.map(k=>{
+    const [label, cls] = LEGEND_ITEMS[k] || [k,k];
+    return `<span><i class="lg-line ${cls}"></i>${label}</span>`;
+  }).join('');
+}
+
 function clearMapLayers(){
+  drawnKinds = new Set();
   lMarkers.forEach(m=>lmap.removeLayer(m)); lMarkers=[];
   if(lLine){ lmap.removeLayer(lLine); lLine=null; }
   lRoutes.forEach(l=>lmap.removeLayer(l)); lRoutes=[];
@@ -1446,7 +1463,9 @@ function sliceLine(path, a, b){
 async function drawAiRoute(from, to){
   const route = stopAiRoute(from);
   if(!route || !Array.isArray(route.steps) || !route.steps.length){
+    drawnKinds.add('transit');
     drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
+    renderLegend();
     return;
   }
 
@@ -1465,6 +1484,7 @@ async function drawAiRoute(from, to){
   });
 
   if(real.length){
+    drawnKinds.add('osm');
     // 선로 모양이 확인된 경우: 실제 노선 + 도보 구간
     real.forEach(r=>{
       drawPath(r.seg, { color:r.color, weight:6, dash:null });
@@ -1473,18 +1493,21 @@ async function drawAiRoute(from, to){
     });
     route.steps.forEach(st=>{
       if(!String(st.mode||'').includes('도보')) return;
-      if(st.fromAt && st.toAt) drawPath([st.fromAt, st.toAt], ROUTE_STYLE.walk);
+      if(st.fromAt && st.toAt){ drawnKinds.add('walk'); drawPath([st.fromAt, st.toAt], ROUTE_STYLE.walk); }
     });
+    renderLegend();
     return;
   }
 
   // 추정만 있는 경우: 장소와 장소를 직선으로 잇습니다
+  drawnKinds.add('ai');
   drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:AI_COLOR, weight:4, dash:'10 6' });
+  renderLegend();
 }
 
 /* 선택한 이동수단대로 실제 경로를 그립니다 */
 async function drawRoutesForDay(){
-  if(!HAS_DIR || !dirService) return;
+  if(!HAS_DIR || !dirService){ renderLegend(); return; }
   const token = ++routeToken;
   const day = currentDay(); if(!day) return;
   const pts = visibleStops(day).filter(s=>!s.tbd && s.lat!=null);
@@ -1505,20 +1528,25 @@ async function drawRoutesForDay(){
     } else if(mode==='transit' && r.steps.length){
       r.steps.forEach(st=>{
         if(st.kind==='transit'){
+          drawnKinds.add('transit');
           drawPath(st.path, { color: st.color || ROUTE_STYLE.transit.color, weight:6, dash:null });
           const a=st.path[0], b=st.path[st.path.length-1];
           if(a) drawStationDot(a[0],a[1], st.color||ROUTE_STYLE.transit.color, `${st.from} · ${st.name} 승차`);
           if(b) drawStationDot(b[0],b[1], st.color||ROUTE_STYLE.transit.color, `${st.to} · ${st.name} 하차`);
         } else {
+          drawnKinds.add('walk');
           drawPath(st.path, ROUTE_STYLE.walk);
         }
       });
     } else if(mode==='walk'){
+      drawnKinds.add('walk');
       drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.walk);
     } else {
+      drawnKinds.add('drive');
       drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.drive);
     }
   }
+  renderLegend();
 }
 function groupViewOf(g){
   const act=g.items.find(it=>it.stop.id===activeStopId);
