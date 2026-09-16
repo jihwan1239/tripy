@@ -75,6 +75,7 @@
   .screen.active{ display:flex; }
 
   /* ===== MAP ===== */
+  html{ background:#F5F5F8; }
   #screen-map{ overflow:hidden; background:#E9E9ED; }
   #map, #gmap{ position:absolute; inset:0; }
   #gmap{ display:none; }
@@ -82,7 +83,8 @@
   .leaflet-control-attribution{ display:none; }
 
   .float-head{ position:absolute; top:0; left:0; right:0; z-index:500;
-    padding:12px 12px 0; display:flex; flex-direction:column; gap:14px; pointer-events:none; }
+    padding:calc(12px + env(safe-area-inset-top, 0px)) 12px 0;
+    display:flex; flex-direction:column; gap:10px; pointer-events:none; }
   .float-head > *{ pointer-events:auto; }
 
   .topbar{ background:rgba(255,255,255,.86); backdrop-filter:saturate(180%) blur(20px);
@@ -160,11 +162,20 @@
 
   /* ===== SCHEDULE ===== */
   #screen-schedule{ overflow-y:auto; background:#F5F5F8; }
-  .sec-header{ padding:18px 16px 13px; background:rgba(255,255,255,.94);
+  .sec-header{ padding:calc(18px + env(safe-area-inset-top, 0px)) 16px 13px; background:rgba(255,255,255,.94);
     backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
     position:sticky; top:0; z-index:10; border-bottom:.5px solid rgba(0,0,0,.08); }
-  .sec-title-row{ display:flex; align-items:center; gap:8px; margin-bottom:13px; }
+  .sec-title-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .wx-line{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);
+    margin-bottom:12px; letter-spacing:-.01em; min-height:18px; }
+  .wx-ico{ font-size:14px; }
+  .wx-t{ font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .wx-min{ color:var(--muted-2); font-weight:500; }
+  .wx-sep{ color:var(--muted-2); }
+  .wx-pop{ color:var(--c-move); font-weight:500; }
+  .wx-none{ color:var(--muted-2); }
   .sec-header h1{ font-size:26px; font-weight:700; margin:0; letter-spacing:-.03em; flex:1; min-width:0; }
+  .h1-emoji{ margin-right:8px; font-size:23px; vertical-align:-1px; }
   .mini-btn{ flex:0 0 auto; border:none; background:var(--fill); color:var(--ink);
     border-radius:var(--r-ctl); padding:9px 14px; font-size:13px; font-weight:500; cursor:pointer;
     display:flex; align-items:center; gap:6px; letter-spacing:-.01em; }
@@ -201,6 +212,12 @@
   .seg-toggle .seg:active{ opacity:1; transform:scale(.96); }
 
   /* 카테고리 고르기 */
+  .lbl-row{ display:flex; align-items:center; justify-content:space-between; margin:16px 0 7px; }
+  .ai-mini{ border:none; background:var(--red-soft); color:var(--red); border-radius:7px;
+    padding:6px 10px; font-size:12px; font-weight:600; cursor:pointer;
+    display:inline-flex; align-items:center; gap:5px; letter-spacing:-.01em; }
+  .ai-mini .icon{ width:12px; height:12px; }
+  .ai-mini:disabled{ opacity:.5; }
   .cat-pick{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
   .cat-opt{ display:flex; align-items:center; justify-content:center; gap:5px;
     border:none; background:var(--fill); color:var(--muted); border-radius:9px;
@@ -282,6 +299,15 @@
 
   /* 안(案) 선택 */
   .plan-bar{ display:flex; gap:6px; align-items:center; overflow-x:auto; scrollbar-width:none; }
+  .plan-bar.map-plan{ align-self:flex-start; max-width:100%;
+    background:rgba(255,255,255,.78); backdrop-filter:saturate(180%) blur(18px);
+    -webkit-backdrop-filter:saturate(180%) blur(18px);
+    border-radius:11px; padding:5px; box-shadow:var(--shadow-card); }
+  .plan-bar.map-plan .plan-chip{ background:transparent; }
+  .plan-bar.map-plan .plan-chip.on{ background:rgba(217,44,68,.12); }
+  .plan-bar.map-plan .plan-pick{ padding:7px 12px; font-size:13px; }
+  .plan-bar.map-plan .plan-add{ width:28px; height:28px; background:transparent; }
+  .plan-bar[hidden]{ display:none; }
   .plan-bar::-webkit-scrollbar{ display:none; }
   .plan-chip{ flex:0 0 auto; display:inline-flex; align-items:center;
     background:var(--fill); color:var(--muted); border-radius:8px;
@@ -344,21 +370,36 @@
   .mini-badge.fl{ background:var(--c-move-s); color:var(--c-move); }
 
   /* 이동 줄 */
-  .tmove{ display:flex; align-items:center; gap:9px; padding:7px 14px; background:#FBFBFD;
-    flex-wrap:wrap; position:relative; }
-  .tmove::after{ content:''; position:absolute; left:47px; right:0; bottom:0; height:1px; background:var(--line); }
-  .tm-add{ flex:0 0 22px; width:22px; height:22px; border-radius:50%; border:none;
-    background:#fff; color:var(--red); font-size:15px; font-weight:400; line-height:1; cursor:pointer; padding:0;
-    display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(0,0,0,.08); }
-  .tm-open{ flex:1; min-width:0; display:flex; align-items:center; gap:7px; border:none;
-    background:none; padding:5px 0; cursor:pointer; color:var(--muted); font-size:12.5px; font-weight:500;
+  .tmove{ display:block; padding:0; background:#FBFBFD; position:relative; }
+  .tmove::after{ content:''; position:absolute; left:14px; right:0; bottom:0; height:1px; background:var(--line); }
+
+  /* 점선 위의 '일정 추가' — 이동수단과 확실히 분리 */
+  .tm-insert{ display:flex; align-items:center; gap:8px; padding:2px 14px 10px; }
+  .tm-dash{ flex:1; height:0; border-top:1px dashed var(--line-2); }
+  .tm-add{ flex:0 0 auto; border:1px dashed var(--line-2); background:#fff; color:var(--muted);
+    border-radius:999px; padding:5px 12px; font-size:11.5px; font-weight:500; cursor:pointer;
     letter-spacing:-.01em; }
-  .tm-open .icon{ width:13px; height:13px; }
+  .tm-add:active{ border-color:var(--red); color:var(--red); }
+
+  /* 이동수단 줄 — 터치 영역을 크게 */
+  .tm-open{ width:100%; display:flex; align-items:center; gap:9px; border:none;
+    background:none; padding:12px 14px 10px; cursor:pointer; color:var(--muted);
+    font-size:13px; font-weight:500; letter-spacing:-.01em; }
+  .tm-ico{ flex:0 0 26px; width:26px; height:26px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; }
+  .tm-ico .icon{ width:14px; height:14px; }
   .tm-label{ flex:1; min-width:0; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .tm-fare{ font-family:var(--font-mono); color:var(--ink); font-weight:600; }
-  .tm-caret{ flex:0 0 auto; }
-  .tm-open.open .tm-caret{ transform:rotate(180deg); display:inline-block; }
-  .tm-detail{ width:100%; border-top:1px solid var(--line); margin-top:4px; }
+  .tm-label b{ color:var(--ink); font-weight:600; }
+  .tm-fare{ color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums; }
+  .tm-caret{ flex:0 0 22px; width:22px; height:22px; border-radius:50%; background:transparent;
+    display:flex; align-items:center; justify-content:center; color:var(--muted-2);
+    transition:transform .26s var(--ease), color .2s var(--ease); }
+  .tm-caret .icon{ width:15px; height:15px; }
+  .tm-caret .icon svg{ stroke-width:2; }
+  .tm-open.open .tm-caret{ transform:rotate(180deg); color:var(--mc); }
+  .tm-open:active .tm-caret{ color:var(--ink); }
+  .tm-open.open{ color:var(--ink); }
+  .tm-detail{ padding:0 14px 8px; margin-top:2px; }
   .tm-detail .leg{ padding:6px 0; }
   .tm-detail .leg .rail{ display:none; }
   .tm-detail .legbody{ padding:8px 0; }
@@ -509,7 +550,16 @@
     letter-spacing:-.02em; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .form-card{ background:#fff; border-radius:14px; padding:18px; margin-top:10px;
     box-shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.07); }
-  .form-card h3{ font-size:17px; margin:0 0 16px; font-weight:600; letter-spacing:-.02em; }
+  .form-card h3{ font-size:17px; margin:0; font-weight:600; letter-spacing:-.02em; }
+  .fc-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .fc-close{ flex:0 0 30px; width:30px; height:30px; border:none; background:transparent;
+    border-radius:8px; color:var(--muted-2); font-size:15px; cursor:pointer; margin:-4px -6px -4px 0;
+    display:flex; align-items:center; justify-content:center; }
+  .fc-close:active{ color:var(--ink); background:var(--fill); }
+  .form-actions.sticky{ position:sticky; bottom:0; margin:18px -18px -18px; padding:14px 18px;
+    background:rgba(255,255,255,.94); backdrop-filter:saturate(180%) blur(16px);
+    -webkit-backdrop-filter:saturate(180%) blur(16px);
+    border-top:.5px solid rgba(0,0,0,.08); border-radius:0 0 14px 14px; }
   .form-card label{ display:block; font-size:12.5px; color:var(--muted); font-weight:400; margin:16px 0 7px;
     letter-spacing:-.01em; }
   .form-card label.first{ margin-top:0; }
@@ -595,9 +645,10 @@
     background:#D8D8DD; margin:0 auto 16px; }
   .modal h2{ font-size:21px; font-weight:700; margin:0 0 6px; letter-spacing:-.03em; }
   .modal .sub{ font-size:12.5px; color:var(--muted); margin:0 0 16px; line-height:1.6; }
-  .modal-close{ position:absolute; top:26px; right:18px; border:none; background:var(--tint);
-    border-radius:50%; width:28px;height:28px; cursor:pointer; color:var(--muted);
+  .modal-close{ position:absolute; top:24px; right:16px; border:none; background:transparent;
+    border-radius:8px; width:30px;height:30px; cursor:pointer; color:var(--muted-2);
     display:flex;align-items:center;justify-content:center; }
+  .modal-close:active{ color:var(--ink); background:var(--fill); }
   .sugg-card{ background:var(--tint); border-radius:var(--r-md); padding:14px; margin-bottom:8px; }
   .sugg-card .name{ font-weight:700; font-size:14.5px; }
   .sugg-card .cat{ font-size:11px; color:var(--red); font-weight:700; margin:3px 0 7px; }
@@ -669,6 +720,7 @@
         <button class="head-btn" id="shareBtn" title="공유"><span class="icon" data-i="share"></span></button>
         <button class="head-btn" id="statusBtn" title="연동 상태"><span class="icon" data-i="info"></span></button>
       </div>
+      <div class="plan-bar map-plan" id="planBarMap" hidden></div>
     </div>
 
     <div class="bottom-stack">
@@ -693,6 +745,7 @@
         <h1 id="schedTitle">일정표</h1>
         <button class="mini-btn ghost" id="tripSetBtn"><span class="icon" data-i="pencil"></span>여행 설정</button>
       </div>
+      <div class="wx-line" id="wxLine"></div>
       <div class="trip-set" id="tripSet" hidden>
         <button class="stay-row" id="flightBtn">
           <span class="icon" data-i="plane"></span>
@@ -721,7 +774,7 @@
 
   <!-- ============ PREP ============ -->
   <div class="screen" id="screen-prep">
-    <div class="sec-header"><div class="sec-title-row"><h1>입국 전 준비사항</h1></div></div>
+    <div class="sec-header"><div class="sec-title-row"><h1><span class="h1-emoji">🛂</span>입국 전 준비사항</h1></div></div>
     <div class="prep-body">
       <div class="progress">
         <div class="top"><span>준비 진행률</span><span id="prepCount">0 / 0</span></div>
@@ -816,6 +869,7 @@ const RAW = {
   navMap:'<path d="M12 21s7-6.6 7-12.2A7 7 0 105 8.8C5 14.4 12 21 12 21z"/><circle cx="12" cy="8.7" r="2.3"/>',
   navList:'<path d="M4 6h16M4 12h16M4 18h10"/>',
   navCheck:'<path d="M4 12.5l5 5L20 6"/>',
+  chev:'<path d="M6 9.5l6 5.5 6-5.5"/>',
   walk:'<circle cx="13" cy="4.5" r="1.8"/><path d="M12 8.5l-3 3.5 1.5 3.5L9 21M12 8.5l3 2 2 3M10.5 15.5L14 21"/>',
   metro:'<rect x="5" y="3.5" width="14" height="13" rx="3"/><path d="M5 11.5h14M7.5 20.5l2-4M16.5 20.5l-2-4"/><circle cx="8.8" cy="8" r="1"/><circle cx="15.2" cy="8" r="1"/>',
   bus:'<rect x="4" y="3.5" width="16" height="13" rx="2.5"/><path d="M4 11h16M6.5 20.5v-4M17.5 20.5v-4"/><circle cx="7.8" cy="14" r="1"/><circle cx="16.2" cy="14" r="1"/>',
@@ -973,6 +1027,31 @@ function removePlan(day, planId){
   markChanged();
   return true;
 }
+
+/* 공통 일정(숙소·항공편)은 안마다 다른 값을 가질 수 있게 따로 보관합니다 */
+function planField(day, stop, key){
+  if(!stop) return undefined;
+  if(stop.plan) return stop[key];                 // 안에 귀속된 일정은 그대로
+  const ps = dayPlans(day);
+  if(ps.length<=1) return stop[key];
+  const pid = activePlanId(day);
+  if(stop.byPlan && stop.byPlan[pid] && stop.byPlan[pid][key]!==undefined) return stop.byPlan[pid][key];
+  return stop[key];
+}
+function setPlanField(day, stop, key, value){
+  if(!stop) return;
+  const ps = dayPlans(day);
+  if(stop.plan || ps.length<=1){ stop[key]=value; return; }
+  const pid = activePlanId(day);
+  if(!stop.byPlan) stop.byPlan = {};
+  if(!stop.byPlan[pid]) stop.byPlan[pid] = {};
+  stop.byPlan[pid][key] = value;
+}
+/* 현재 안 기준의 이동수단·AI 결과 */
+function stopMode(stop){ return normalizeMode(planField(currentDay(), stop, 'mode')); }
+function stopAiRoute(stop){ return planField(currentDay(), stop, 'aiRoute'); }
+function stopTaxiFare(stop){ return planField(currentDay(), stop, 'taxiFare'); }
+function stopTaxiNote(stop){ return planField(currentDay(), stop, 'taxiNote'); }
 
 /* 화면에 반영할 일정 (현재 안 + 선택 일정 제외 모드 반영) */
 function visibleStops(day){
@@ -1362,7 +1441,7 @@ function sliceLine(path, a, b){
 
 /* AI가 추정한 대중교통 경로를 지도에 그립니다 */
 async function drawAiRoute(from, to){
-  const route = from.aiRoute;
+  const route = stopAiRoute(from);
   if(!route || !Array.isArray(route.steps) || !route.steps.length){
     drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
     return;
@@ -1409,7 +1488,7 @@ async function drawRoutesForDay(){
 
   for(let i=0;i<pts.length-1;i++){
     const from=pts[i], to=pts[i+1];
-    const mode=normalizeMode(from.mode);
+    const mode=stopMode(from);
     const r = await requestRoute(from,to,modeToG(mode));
     if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
     if(!r || !r.ok){
@@ -1625,20 +1704,21 @@ function nextMoveHtml(stop, day){
   const i = list.findIndex(x=>x.id===stop.id);
   const next = list[i+1];
   if(!next) return '';
-  const mode = normalizeMode(stop.mode);
+  const mode = stopMode(stop);
   const m = MODES.find(x=>x.key===mode) || MODES[0];
 
   let chain='';
-  if(mode==='transit' && stop.aiRoute && Array.isArray(stop.aiRoute.steps)){
-    const segs = stop.aiRoute.steps.filter(st=> !String(st.mode||'').includes('도보'));
+  const sar = stopAiRoute(stop);
+  if(mode==='transit' && sar && Array.isArray(sar.steps)){
+    const segs = sar.steps.filter(st=> !String(st.mode||'').includes('도보'));
     if(segs.length){
       chain = segs.slice(0,3).map(st=>
         `<span class="nm-line">${esc(st.line||st.mode||'')}</span>`
       ).join('<span class="nm-arrow">›</span>');
     }
   }
-  const fare = (mode==='transit' && stop.aiRoute && stop.aiRoute.fare) ? ` · ${esc(String(stop.aiRoute.fare))}` : '';
-  const mins = (mode==='transit' && stop.aiRoute && stop.aiRoute.minutes) ? ` · 약 ${esc(String(stop.aiRoute.minutes))}분` : '';
+  const fare = (mode==='transit' && sar && sar.fare) ? ` · ${esc(String(sar.fare))}` : '';
+  const mins = (mode==='transit' && sar && sar.minutes) ? ` · 약 ${esc(String(sar.minutes))}분` : '';
 
   return `<div class="pc-next">
       <span class="nm-head"><span class="icon">${iconSvg(m.icon)}</span>${m.label}</span>
@@ -1680,8 +1760,17 @@ function playDayAnim(){
     el.classList.add(cls);
   });
 }
+function renderPlanBarMap(){
+  const day=currentDay();
+  const el=document.getElementById('planBarMap');
+  if(!el) return;
+  if(!day || dayPlans(day).length<=1){ el.innerHTML=''; el.hidden=true; return; }
+  renderPlanBar(day, 'planBarMap');
+}
+
 function onDayChange(){
   closeForm(); closeDayForm();
+  renderPlanBarMap();
   renderMapForDay(); renderCarousel();
   if(document.getElementById('screen-schedule').classList.contains('active')) renderScheduleScreen();
   playDayAnim();
@@ -1774,7 +1863,9 @@ function renderScheduleScreenInner(){
   }
   if(!day){ wrap.innerHTML=`<div class="empty-note">날짜가 없어요.<br>위의 "날짜" 버튼으로 여행 날짜를 추가해보세요.</div>`; sumEl.innerHTML=''; return; }
 
+  renderWeather(day);
   renderPlanBar(day);
+  renderPlanBarMap();
   renderDaySummary(day, sumEl);
 
   const list = visibleStops(day);
@@ -1824,7 +1915,7 @@ function rowEl(s, idx){
 function moveBar(from, to){
   const bar=document.createElement('div');
   bar.className='tmove';
-  const mode=normalizeMode(from.mode);
+  const mode=stopMode(from);
   const m=MODES.find(x=>x.key===mode)||MODES[0];
   const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
   const km = both? haversineKm(from,to) : null;
@@ -1832,22 +1923,27 @@ function moveBar(from, to){
   const known = both? knownLegMinutes(from,to) : null;
   let label = known? (known.src==='est'? `약 ${fmtMin(known.mins)}` : fmtMin(known.mins)) : '위치 미정';
   let extra = '';
-  if(mode==='transit' && from.aiRoute && from.aiRoute.fare){
-    extra = `<span class="tm-fare">${esc(String(from.aiRoute.fare))}</span>`;
+  const barAi = stopAiRoute(from);
+  if(mode==='transit' && barAi && barAi.fare){
+    extra = `<span class="tm-fare">${esc(String(barAi.fare))}</span>`;
   }
-  if(mode==='taxi' && from.taxiFare){
-    extra = `<span class="tm-fare">${esc(String(from.taxiFare))}</span>`;
+  if(mode==='taxi' && stopTaxiFare(from)){
+    extra = `<span class="tm-fare">${esc(String(stopTaxiFare(from)))}</span>`;
   }
 
   bar.innerHTML=`
-    <button type="button" class="tm-add" title="여기에 일정 추가">+</button>
     <button type="button" class="tm-open" style="--mc:${m.c}">
-      <span class="icon" style="color:${m.c}">${iconSvg(m.icon)}</span>
-      <span class="tm-label">${m.label} ${label}</span>
+      <span class="tm-ico" style="background:${m.s};color:${m.c}">${iconSvg(m.icon)}</span>
+      <span class="tm-label">${m.label} <b>${label}</b></span>
       ${extra}
-      <span class="tm-caret">⌄</span>
+      <span class="tm-caret"><span class="icon">${iconSvg('chev')}</span></span>
     </button>
-    <div class="tm-detail" hidden></div>`;
+    <div class="tm-detail" hidden></div>
+    <div class="tm-insert">
+      <span class="tm-dash"></span>
+      <button type="button" class="tm-add">＋ 일정 추가</button>
+      <span class="tm-dash"></span>
+    </div>`;
 
   bar.querySelector('.tm-add').addEventListener('click', (e)=>{
     e.stopPropagation();
@@ -1892,6 +1988,10 @@ function getFormArea(){
 
 /* 편집 폼을 해당 줄 바로 아래에 펼칩니다 */
 function openFormAt(anchor, stopId, prefill){
+  // 열려 있는 같은 줄을 다시 누르면 닫습니다
+  if(anchor && anchor.classList && anchor.classList.contains('open') && stopId && editingStopId===stopId){
+    closeForm(); return;
+  }
   const fa=getFormArea();
   if(fa && anchor && anchor.parentNode) anchor.after(fa);
   document.querySelectorAll('.trow.open').forEach(r=>r.classList.remove('open'));
@@ -1899,11 +1999,78 @@ function openFormAt(anchor, stopId, prefill){
   openForm(stopId, prefill);
 }
 
+/* ---- 날씨 (Open-Meteo · 키 없이 무료) ---- */
+const WX_CODE = {
+  0:['맑음','☀'],1:['대체로 맑음','🌤'],2:['구름 조금','⛅'],3:['흐림','☁'],
+  45:['안개','🌫'],48:['짙은 안개','🌫'],
+  51:['이슬비','🌦'],53:['이슬비','🌦'],55:['이슬비','🌦'],
+  61:['약한 비','🌧'],63:['비','🌧'],65:['강한 비','🌧'],
+  66:['진눈깨비','🌨'],67:['진눈깨비','🌨'],
+  71:['약한 눈','🌨'],73:['눈','🌨'],75:['강한 눈','❄'],77:['싸락눈','🌨'],
+  80:['소나기','🌦'],81:['소나기','🌦'],82:['강한 소나기','⛈'],
+  85:['소낙눈','🌨'],86:['소낙눈','🌨'],
+  95:['뇌우','⛈'],96:['우박 동반 뇌우','⛈'],99:['우박 동반 뇌우','⛈']
+};
+const wxCache = {};
+async function fetchWeather(iso, lat, lng){
+  const key = `${iso}|${lat.toFixed(2)},${lng.toFixed(2)}`;
+  if(wxCache[key] !== undefined) return wxCache[key];
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
+      + `&timezone=Asia%2FTokyo&start_date=${iso}&end_date=${iso}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const day = d.daily;
+    if(!day || !day.time || !day.time.length) throw new Error('no data');
+    const out = {
+      code: day.weather_code[0],
+      max: Math.round(day.temperature_2m_max[0]),
+      min: Math.round(day.temperature_2m_min[0]),
+      pop: day.precipitation_probability_max[0]
+    };
+    wxCache[key] = out;
+    return out;
+  }catch(e){
+    wxCache[key] = null;
+    return null;
+  }
+}
+async function renderWeather(day){
+  const el = document.getElementById('wxLine');
+  if(!el) return;
+  if(!day || !day.iso){ el.innerHTML=''; return; }
+
+  // 그 날 첫 장소 좌표 (없으면 삿포로 중심)
+  const spot = (day.stops||[]).find(x=>!x.tbd && x.lat!=null);
+  const lat = spot? spot.lat : SAPPORO.lat;
+  const lng = spot? spot.lng : SAPPORO.lng;
+
+  const daysAhead = Math.round((new Date(day.iso+'T00:00:00') - new Date(new Date().toDateString()))/86400000);
+  if(daysAhead < 0){ el.innerHTML=''; return; }
+  if(daysAhead > 15){
+    el.innerHTML = `<span class="wx-none">예보는 출발 2주 전부터 볼 수 있어요</span>`;
+    return;
+  }
+
+  el.innerHTML = `<span class="wx-none">날씨 확인 중…</span>`;
+  const w = await fetchWeather(day.iso, lat, lng);
+  if(!w){ el.innerHTML = `<span class="wx-none">날씨를 불러오지 못했어요</span>`; return; }
+  const [label, emoji] = WX_CODE[w.code] || ['—','·'];
+  el.innerHTML = `
+    <span class="wx-ico">${emoji}</span>
+    <span class="wx-t">${w.max}° <span class="wx-min">${w.min}°</span></span>
+    <span class="wx-sep">·</span><span>${esc(label)}</span>
+    ${w.pop!=null? `<span class="wx-sep">·</span><span class="wx-pop">강수 ${w.pop}%</span>`:''}`;
+}
+
 /* 안 선택 바 */
-function renderPlanBar(day){
-  const el=document.getElementById('planBar');
+function renderPlanBar(day, targetId){
+  const el=document.getElementById(targetId||'planBar');
   if(!el) return;
   if(!day){ el.innerHTML=''; return; }
+  el.hidden=false;
   const ps=dayPlans(day), act=activePlanId(day);
   const count=(pid)=> day.stops.filter(x=> (!x.plan && (x.stay||x.flight)) || !x.plan || x.plan===pid).length;
 
@@ -1921,7 +2088,7 @@ function renderPlanBar(day){
     b.addEventListener('click', ()=>{
       if(day.activePlan === b.dataset.plan) return;
       day.activePlan=b.dataset.plan; markChanged();
-      activeStopId=null; renderScheduleScreen(); refreshAll();
+      activeStopId=null; renderScheduleScreen(); renderPlanBarMap(); refreshAll();
     });
   });
 
@@ -2001,9 +2168,10 @@ const routeCache = {};
 const legTimes = {};
 function legKey(from,to,mode){ return `${from.id}-${to.id}-${normalizeMode(mode)}`; }
 function knownLegMinutes(from,to){
-  const mode = normalizeMode(from.mode);
-  if(mode==='transit' && from.aiRoute && from.aiRoute.minutes){
-    return { mins: Number(from.aiRoute.minutes), src:'ai' };
+  const mode = stopMode(from);
+  const ar = stopAiRoute(from);
+  if(mode==='transit' && ar && ar.minutes){
+    return { mins: Number(ar.minutes), src:'ai' };
   }
   const hit = legTimes[legKey(from,to,mode)];
   if(hit) return hit;
@@ -2012,7 +2180,7 @@ function knownLegMinutes(from,to){
 }
 /* 접힌 이동 줄에 실제 값이 들어오면 화면을 갱신합니다 */
 async function primeLegTime(from,to,onDone){
-  const mode = normalizeMode(from.mode);
+  const mode = stopMode(from);
   if(mode==='transit') return;                       // 대중교통은 AI 값을 씁니다
   if(!HAS_DIR || !dirService) return;
   if(from.tbd || to.tbd || from.lat==null || to.lat==null) return;
@@ -2237,7 +2405,7 @@ async function askAiRoute(from, to, btn, box){
 
     box.innerHTML = `<div class="ai-route loading">경로를 지도에 표시하는 중...</div>`;
     await geocodeAiRoute(data, from, to);
-    from.aiRoute = data;
+    setPlanField(currentDay(), from, 'aiRoute', data);
     markChanged();
     box.innerHTML = renderAiRoute(data);
     renderMapForDay();
@@ -2304,10 +2472,10 @@ async function askTaxiFare(from, to, btn, box, routeInfo){
       const txt=(j.choices&&j.choices[0]&&j.choices[0].message? j.choices[0].message.content:'').replace(/```json|```/g,'').trim();
       data = JSON.parse(txt);
     }
-    from.taxiFare = data.fare || '';
-    from.taxiNote = data.note || '';
+    setPlanField(currentDay(), from, 'taxiFare', data.fare || '');
+    setPlanField(currentDay(), from, 'taxiNote', data.note || '');
     markChanged();
-    box.innerHTML = renderTaxiFare(from.taxiFare, from.taxiNote);
+    box.innerHTML = renderTaxiFare(stopTaxiFare(from), stopTaxiNote(from));
     renderScheduleScreen();
   }catch(e){
     console.warn('[택시 요금]', e);
@@ -2348,7 +2516,7 @@ function buildLeg(from,to){
   const leg=document.createElement('div'); leg.className='leg';
   const both = !from.tbd && !to.tbd && from.lat!=null && to.lat!=null;
   const km = both? haversineKm(from,to):null;
-  const cur = normalizeMode(from.mode);
+  const cur = stopMode(from);
 
   const modesHtml = MODES.map(m=>{
     const mins = both? estimateMinutes(km,m.key):null;
@@ -2376,7 +2544,7 @@ function buildLeg(from,to){
 
   leg.querySelectorAll('.mode').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      from.mode=btn.dataset.mode; markChanged();
+      setPlanField(currentDay(), from, 'mode', btn.dataset.mode); markChanged();
       renderScheduleScreen();
       renderMapForDay();           // 지도에도 바로 반영
     });
@@ -2403,7 +2571,7 @@ function vehicleLabel(type){
 async function fillLegDetail(from,to,legEl,km){
   const metaEl   = legEl.querySelector('.legmeta');
   const detailEl = legEl.querySelector('.route-detail');
-  const cur      = normalizeMode(from.mode);
+  const cur      = stopMode(from);
 
   // 칩에 표시할 각 수단 소요시간
   const gList=[...new Set(MODES.map(m=>m.g))];
@@ -2419,8 +2587,9 @@ async function fillLegDetail(from,to,legEl,km){
       if(el){ el.textContent=fmtMin(r.mins); anyReal=true; }
     }
     // 대중교통은 구글이 일본을 지원하지 않으므로 AI 값이 있으면 그걸 씁니다
-    if(m.key==='transit' && el && from.aiRoute && from.aiRoute.minutes){
-      el.textContent = `약 ${from.aiRoute.minutes}분`;
+    const fdAi = stopAiRoute(from);
+    if(m.key==='transit' && el && fdAi && fdAi.minutes){
+      el.textContent = `약 ${fdAi.minutes}분`;
     }
   });
 
@@ -2435,7 +2604,7 @@ async function fillLegDetail(from,to,legEl,km){
     if(cur==='transit'){
       // 구글 Directions API는 일본 대중교통을 지원하지 않습니다.
       const est = fmtMin(estimateMinutes(km,'transit'));
-      const saved = from.aiRoute;
+      const saved = stopAiRoute(from);
       detailEl.innerHTML = `
         <div class="rd-actions">
           ${gmapLink}
@@ -2523,13 +2692,13 @@ async function fillLegDetail(from,to,legEl,km){
 
   const taxiBtn = (cur==='taxi')
     ? `<button type="button" class="ai-btn" data-ai-taxi>
-         <span class="icon">${iconSvg('star')}</span>${from.taxiFare? '요금 다시 계산':'AI로 택시 요금'}
+         <span class="icon">${iconSvg('star')}</span>${stopTaxiFare(from)? '요금 다시 계산':'AI로 택시 요금'}
        </button>` : '';
 
   detailEl.innerHTML =
     `<div class="rd-head">${bits.join('<span class="rd-sep">·</span>')}</div>${chain}${stepsHtml}`
     + `<div class="rd-actions">${gmapLink}${taxiBtn}</div>`
-    + `<div class="taxi-box">${from.taxiFare? renderTaxiFare(from.taxiFare, from.taxiNote):''}</div>`;
+    + `<div class="taxi-box">${stopTaxiFare(from)? renderTaxiFare(stopTaxiFare(from), stopTaxiNote(from)):''}</div>`;
 
   const tb = detailEl.querySelector('[data-ai-taxi]');
   if(tb){
@@ -2681,7 +2850,7 @@ function openFlightForm(){
   document.getElementById('fl_cancel').addEventListener('click', ()=> closeDayForm());
   const c=document.getElementById('fl_clear');
   if(c) c.addEventListener('click', clearFlights);
-  getFormArea().scrollIntoView({behavior:'smooth', block:'start'});
+  scrollFormIntoView();
 }
 
 async function saveFlights(){
@@ -2835,11 +3004,12 @@ function openStayForm(){
   document.getElementById('f_geoSearch').addEventListener('click', ()=> doGeoSearch(false));
   document.getElementById('f_geoQuery').addEventListener('input', onGeoInput);
   document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
+  document.getElementById('f_aiNote').addEventListener('click', aiFillNote);
   document.getElementById('s_save').addEventListener('click', saveStay);
   document.getElementById('s_cancel').addEventListener('click', ()=> closeDayForm());
   const cl=document.getElementById('s_clear');
   if(cl) cl.addEventListener('click', clearStay);
-  getFormArea().scrollIntoView({behavior:'smooth', block:'start'});
+  scrollFormIntoView();
 }
 
 function saveStay(){
@@ -2908,7 +3078,7 @@ function openDayForm(mode){
   document.getElementById('d_save').addEventListener('click', ()=> saveDay(editing));
   document.getElementById('d_cancel').addEventListener('click', ()=>{ closeDayForm(); });
   if(editing) document.getElementById('d_delete').addEventListener('click', ()=> deleteDay(editing));
-  getFormArea().scrollIntoView({behavior:'smooth',block:'start'});
+  scrollFormIntoView();
 }
 function nextSuggestedIso(){
   if(!TRIP.days.length) return new Date().toISOString().slice(0,10);
@@ -2951,7 +3121,10 @@ function openForm(stopId, prefill){
   const isOpt = ed ? !!ed.opt : false;
   getFormArea().innerHTML=`
     <div class="form-card">
-      <h3>${ed? '일정 수정':'일정 추가'}</h3>
+      <div class="fc-head">
+        <h3>${ed? '일정 수정':'일정 추가'}</h3>
+        <button type="button" class="fc-close" id="f_close" aria-label="닫기">✕</button>
+      </div>
       ${pf.afterName? `<p class="hint" style="margin:-6px 0 14px;"><b>${esc(pf.afterName)}</b> 다음, <b>${esc(pf.beforeName)}</b> 앞에 들어갑니다.</p>`:''}
       <label class="first">이름</label>
       <input type="text" id="f_name" value="${ed? esc(ed.name):''}" placeholder="장소 이름">
@@ -2972,8 +3145,6 @@ function openForm(stopId, prefill){
           </button>`).join('')}
       </div>
       <input type="hidden" id="f_cat" value="${ed? ed.cat : '관광'}">
-      <label>메모</label>
-      <textarea id="f_note" placeholder="간단한 메모">${ed? esc(ed.note||''):''}</textarea>
       <label>위치 검색</label>
       <div class="geo-row">
         <input type="text" id="f_geoQuery" placeholder="예: 오도리공원 삿포로" value="${ed&&!ed.tbd? esc(ed.name):''}">
@@ -2983,7 +3154,15 @@ function openForm(stopId, prefill){
       <p class="hint" id="f_geoStatus">${ed&&!ed.tbd? '기존 위치가 저장되어 있어요. 다시 검색하면 위치가 바뀌어요.':'두 글자 이상 입력하면 후보가 바로 떠요.'}</p>
       <button type="button" class="link-btn" id="f_pickMap">지도에서 직접 찍기</button>
       <div id="f_miniMap" class="mini-map" style="display:none;"></div>
-      <div class="form-actions">
+
+      <div class="lbl-row">
+        <label style="margin:0;">메모</label>
+        <button type="button" class="ai-mini" id="f_aiNote">
+          <span class="icon">${iconSvg('star')}</span>AI로 채우기
+        </button>
+      </div>
+      <textarea id="f_note" placeholder="간단한 메모">${ed? esc(ed.note||''):''}</textarea>
+      <div class="form-actions sticky">
         <button class="btn-primary" id="f_save">${ed? '수정 저장':'일정에 추가'}</button>
         <button class="btn-ghost" id="f_cancel">취소</button>
         ${ed? '<button class="btn-ghost btn-danger" id="f_delete">삭제</button>':''}
@@ -2992,6 +3171,7 @@ function openForm(stopId, prefill){
   if(ed && !ed.tbd) geoPicked={lat:ed.lat,lng:ed.lng,label:ed.place||ed.name};
   miniMap=null; miniMarker=null; acToken=null; clearTimeout(searchTimer);
   bindTimeField('f_time');
+  document.getElementById('f_close').addEventListener('click', closeForm);
   document.querySelectorAll('#f_catWrap .cat-opt').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelectorAll('#f_catWrap .cat-opt').forEach(x=>x.classList.remove('on'));
@@ -3007,13 +3187,83 @@ function openForm(stopId, prefill){
   });
   document.getElementById('f_geoSearch').addEventListener('click', ()=> doGeoSearch(false));
   document.getElementById('f_pickMap').addEventListener('click', toggleMiniMap);
+  document.getElementById('f_aiNote').addEventListener('click', aiFillNote);
   document.getElementById('f_geoQuery').addEventListener('input', onGeoInput);
   document.getElementById('f_geoQuery').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(searchTimer); doGeoSearch(false); } });
   document.getElementById('f_save').addEventListener('click', saveForm);
   document.getElementById('f_cancel').addEventListener('click', closeForm);
   if(ed) document.getElementById('f_delete').addEventListener('click', ()=> deleteStop(stopId));
-  getFormArea().scrollIntoView({behavior:'smooth',block:'start'});
+  scrollFormIntoView();
 }
+/* 장소 이름·위치를 바탕으로 메모 초안을 받아옵니다 */
+async function aiFillNote(){
+  const btn = document.getElementById('f_aiNote');
+  const nameEl = document.getElementById('f_name');
+  const noteEl = document.getElementById('f_note');
+  const st = document.getElementById('f_geoStatus');
+  const name = nameEl.value.trim() || (geoPicked && geoPicked.label) || '';
+  if(!name){ toast('장소를 먼저 입력하거나 검색해주세요'); return; }
+  if(!aiUsable()){ toast(`AI 메모는 연결이 필요해요. ${DISABLED_MSG}`); return; }
+  if(noteEl.value.trim() && !confirm('메모를 AI 초안으로 덮어쓸까요?')) return;
+
+  btn.disabled = true;
+  const prev = noteEl.placeholder;
+  noteEl.placeholder = '메모를 작성하는 중...';
+
+  const day = currentDay();
+  const ctx = await dayContext(day && day.iso);
+  const cat = document.getElementById('f_cat').value;
+  const place = geoPicked ? shortPlace(geoPicked.label) : '';
+
+  try{
+    let text='';
+    if(aiMode()==='proxy'){
+      const res = await fetch(CFG.AI_PROXY_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ type:'memo', city:'삿포로', name, place, category:cat,
+          time: document.getElementById('f_time').value, date: ctx.date,
+          weekday: ctx.weekday, dayType: ctx.dayType })
+      });
+      if(!res.ok) throw new Error('proxy '+res.status);
+      const j = await res.json();
+      text = j.memo || j.text || '';
+    } else {
+      const res = await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+personalKey()},
+        body: JSON.stringify({ model:CFG.OPENAI_MODEL, temperature:0.5, messages:[
+          {role:'system', content:'너는 여행 일정 메모를 짧게 적어주는 도우미야. 장소의 특징이나 그곳에서 할 일을 한 문장(40자 이내)으로만 써. 따옴표나 군더더기 없이 문장만 출력해.'},
+          {role:'user', content:`도시: 삿포로\n장소: ${name}\n주소: ${place}\n분류: ${cat}\n방문 시각: ${document.getElementById('f_time').value} (${ctx.weekday}요일)\n\n이 일정에 붙일 메모 한 줄을 써줘.`}
+        ]})
+      });
+      if(!res.ok) throw new Error('openai '+res.status);
+      const j = await res.json();
+      text = (j.choices?.[0]?.message?.content || '').trim().replace(/^["'\s]+|["'\s]+$/g,'');
+    }
+    if(!text) throw new Error('empty');
+    noteEl.value = text;
+    st.textContent = 'AI가 메모 초안을 넣었어요. 자유롭게 고치세요.';
+  }catch(e){
+    console.warn('[AI 메모]', e);
+    toast('메모를 불러오지 못했어요');
+  }finally{
+    btn.disabled=false; noteEl.placeholder = prev;
+  }
+}
+
+/* 고정 헤더에 가리지 않도록 폼 상단을 맞춥니다 */
+function scrollFormIntoView(){
+  const fa=document.getElementById('formArea');
+  const screen=document.getElementById('screen-schedule');
+  if(!fa || !screen) return;
+  requestAnimationFrame(()=>{
+    const hdr=document.querySelector('#screen-schedule .sec-header');
+    const offset=(hdr? hdr.offsetHeight : 60) + 8;
+    const top=fa.offsetTop - offset;
+    screen.scrollTo({ top: top<0?0:top, behavior:'smooth' });
+  });
+}
+
 function closeForm(){
   editingStopId=null; geoPicked=null; miniMap=null; miniMarker=null;
   document.querySelectorAll('.trow.open').forEach(r=>r.classList.remove('open'));
@@ -3457,6 +3707,7 @@ function renderPrep(){
 function refreshAll(){
   document.getElementById('tripTitle').textContent = TRIP.title||'여행 일정';
   renderDayChips('daybar', onDayChange);
+  renderPlanBarMap();
   renderMapForDay(); renderCarousel();
   if(document.getElementById('screen-schedule').classList.contains('active')) renderScheduleScreen();
 }
