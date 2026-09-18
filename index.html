@@ -121,6 +121,8 @@
   .daychip{ flex:0 0 auto; min-width:96px; background:var(--fill); color:var(--muted); border:none;
     border-radius:10px; padding:9px 13px; cursor:pointer; text-align:left;
     transition:background .22s var(--ease), color .22s var(--ease); }
+  .daychip .d b{ color:var(--red); font-weight:700; margin-left:3px; }
+  .daychip.active .d b{ color:#fff; }
   .daychip .d{ display:block; font-size:11px; font-weight:500; opacity:.8; margin-bottom:1px;
     font-variant-numeric:tabular-nums; }
   .daychip .l{ display:block; font-size:13.5px; font-weight:600; letter-spacing:-.02em; color:var(--ink);
@@ -360,6 +362,9 @@
   .trow:active{ background:var(--fill); }
   .trow.open{ background:var(--tint); }
   .trow.optional{ background:#FCFCFD; }
+  .trow.now{ background:var(--red-soft); }
+  .trow.now .tc-time{ color:var(--red); font-weight:700; }
+  .trow.now::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red); }
   .trow.optional .tc-name{ color:var(--muted); }
   .tc-num{ flex:0 0 22px; height:22px; border-radius:7px; color:#fff;
     font-size:11px; font-weight:600; font-variant-numeric:tabular-nums;
@@ -503,11 +508,7 @@
   .map-legend::-webkit-scrollbar{ display:none; }
   .map-legend span{ display:flex; align-items:center; gap:5px; flex:0 0 auto; }
   .lg-line{ width:14px; height:3px; border-radius:2px; display:block; }
-  .lg-line.walk{ background:repeating-linear-gradient(90deg,#6E7781 0 3px,transparent 3px 6px); }
-  .lg-line.transit{ background:#1F8C63; }
-  .lg-line.drive{ background:#3D6FD6; }
-  .lg-line.ai{ background:repeating-linear-gradient(90deg,#7C4DFF 0 5px,transparent 5px 8px); }
-  .lg-line.osm{ background:linear-gradient(90deg,#00A650 0 33%,#F39800 33% 66%,#0079C2 66% 100%); }
+  /* 범례 각 항목의 색은 이동수단 색으로 인라인 지정됩니다 */
 
   /* 카드 하단 '다음 이동' */
   .pc-next{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:9px;
@@ -832,7 +833,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script>
 /* ================= CONFIG ================= */
@@ -1005,7 +1006,9 @@ function addPlan(day, copyCurrent){
   // 아직 어느 안에도 속하지 않은 일정을 현재 안으로 귀속 (자동 생성 항목은 공통 유지)
   day.stops.forEach(s=>{ if(!s.plan && !s.stay && !s.flight) s.plan = cur; });
 
-  const np = { id:'p'+Date.now().toString(36)+Math.floor(Math.random()*90+10), name:`${ps.length+1}안` };
+  let n = ps.length + 1;
+  while(ps.some(p=> p.name === `${n}안`)) n++;
+  const np = { id:'p'+Date.now().toString(36)+Math.floor(Math.random()*90+10), name:`${n}안` };
   ps.push(np);
 
   if(copyCurrent){
@@ -1026,7 +1029,12 @@ function removePlan(day, planId){
   if(ps.length<=1) return false;
   day.plans = ps.filter(p=>p.id!==planId);
   day.stops = day.stops.filter(x=> x.plan!==planId);
-  day.plans.forEach((p,i)=>{ p.name = `${i+1}안`; });   // 번호 다시 정리
+  // 기본 이름(1안·2안…)만 번호를 다시 매기고, 직접 지은 이름은 그대로 둡니다
+  let n = 0;
+  day.plans.forEach(p=>{
+    if(p.custom || !/^\d+안$/.test(p.name)) return;
+    n++; p.name = `${n}안`;
+  });
   day.activePlan = day.plans[0].id;
   if(day.plans.length===1){                              // 안이 하나면 귀속 해제
     day.stops.forEach(x=>{ delete x.plan; });
@@ -1240,23 +1248,15 @@ function pinHtml(num, active, multi, color){
 let lRoutes=[], gRoutes=[], routeToken=0;
 let drawnKinds = new Set();
 
-const LEGEND_ITEMS = {
-  walk:    ['도보','walk'],
-  transit: ['대중교통','transit'],
-  drive:   ['차량','drive'],
-  ai:      ['AI 추정','ai'],
-  osm:     ['실제 노선','osm']
-};
 function renderLegend(){
   const el=document.getElementById('mapLegend');
   if(!el) return;
-  const keys=[...drawnKinds];
-  if(!keys.length){ el.hidden=true; el.innerHTML=''; return; }
+  const used = MODES.filter(m=> drawnKinds.has(m.key));   // 도보→대중교통→택시→렌터카 순
+  if(!used.length){ el.hidden=true; el.innerHTML=''; return; }
   el.hidden=false;
-  el.innerHTML = keys.map(k=>{
-    const [label, cls] = LEGEND_ITEMS[k] || [k,k];
-    return `<span><i class="lg-line ${cls}"></i>${label}</span>`;
-  }).join('');
+  el.innerHTML = used.map(m=>
+    `<span><i class="lg-line" style="background:${m.c}"></i>${m.label}</span>`
+  ).join('');
 }
 
 function clearMapLayers(){
@@ -1269,11 +1269,9 @@ function clearMapLayers(){
   gRoutes.forEach(l=>l.setMap(null)); gRoutes=[];
 }
 
-/* 이동수단별 선 스타일 */
+/* 도보 경로 선 (실제 보행로를 따라 그립니다) */
 const ROUTE_STYLE = {
-  walk:  { color:'#6E7781', weight:4, dash:'2 7' },
-  drive: { color:'#3D6FD6', weight:5, dash:null },
-  transit:{ color:'#1F8C63', weight:6, dash:null }
+  walk: { color:'#6E7781', weight:4, dash:'2 7' }
 };
 
 function drawPath(path, style){
@@ -1298,265 +1296,34 @@ function drawPath(path, style){
   }
 }
 
-function drawStationDot(lat,lng,color,title){
-  if(engine==='leaflet'){
-    lRoutes.push(L.circleMarker([lat,lng], {
-      radius:5, color:'#fff', weight:2, fillColor:color||'#1A1A1E', fillOpacity:1
-    }).addTo(lmap).bindTooltip(title||'', {direction:'top'}));
-  } else {
-    gRoutes.push(new google.maps.Marker({
-      position:{lat,lng}, map:gmap, title:title||'',
-      icon:{ path:google.maps.SymbolPath.CIRCLE, scale:5, fillColor:color||'#1A1A1E',
-        fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
-    }));
-  }
-}
-
-/* =========================================================
-   OpenStreetMap(Overpass)에서 실제 노선 선형을 가져옵니다
-   — 지하철·노면전차는 선로 모양이 잘 정리돼 있어요
-   ========================================================= */
-const AI_COLOR = '#7C4DFF';
-const OSM_LS_KEY = 'osm-lines:sapporo:v2';
-const OSM_TTL = 30*24*60*60*1000;          // 30일 캐시
-const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter'
-];
-let osmStatus = '아직 불러오지 않음';
-
-/* 삿포로 주요 노선 별칭 — AI가 한국어로 답해도 매칭되도록 */
-const LINE_ALIAS = [
-  { keys:['난보쿠','남북','namboku','nanboku','南北'],   ja:'南北線',   color:'#00A650' },
-  { keys:['도자이','동서','tozai','東西'],               ja:'東西線',   color:'#F39800' },
-  { keys:['도호','동풍','toho','東豊'],                  ja:'東豊線',   color:'#0079C2' },
-  { keys:['시덴','노면전차','전차','市電','streetcar','tram'], ja:'市電', color:'#E5006E' },
-  { keys:['하코다테','函館'],                            ja:'函館本線', color:'#6C7A89' },
-  { keys:['치토세','千歳','공항선','쾌속에어포트'],       ja:'千歳線',   color:'#1C6BBA' }
-];
-
-let osmLines = null, osmLoading = null;
-
-function normText(x){ return String(x||'').toLowerCase().replace(/[\s·・\-]/g,''); }
-
-function readOsmCache(){
-  try{
-    const raw = localStorage.getItem(OSM_LS_KEY);
-    if(!raw) return null;
-    const o = JSON.parse(raw);
-    if(!o.at || Date.now()-o.at > OSM_TTL) return null;
-    return o.lines;
-  }catch(e){ return null; }
-}
-function writeOsmCache(lines){
-  try{ localStorage.setItem(OSM_LS_KEY, JSON.stringify({ at:Date.now(), lines })); }catch(e){}
-}
-
-/* 관계(relation)의 여러 way를 이어붙여 하나의 선으로 */
-function stitchWays(members){
-  const ways = members.filter(m=>m.type==='way' && Array.isArray(m.geometry) && m.geometry.length>1)
-                      .map(m=> m.geometry.map(g=>[g.lat, g.lon]));
-  if(!ways.length) return [];
-  const near=(a,b)=> Math.abs(a[0]-b[0])<0.0009 && Math.abs(a[1]-b[1])<0.0009;
-  let path = ways.shift().slice();
-  let guard = 0;
-  while(ways.length && guard++ < 500){
-    const end = path[path.length-1];
-    let idx=-1, rev=false;
-    for(let i=0;i<ways.length;i++){
-      if(near(ways[i][0], end)){ idx=i; rev=false; break; }
-      if(near(ways[i][ways[i].length-1], end)){ idx=i; rev=true; break; }
-    }
-    if(idx<0){ // 이어지지 않으면 그냥 다음 조각을 붙임
-      path = path.concat(ways.shift());
-      continue;
-    }
-    const seg = rev ? ways[idx].slice().reverse() : ways[idx];
-    path = path.concat(seg.slice(1));
-    ways.splice(idx,1);
-  }
-  return path;
-}
-
-async function loadOsmLines(){
-  if(osmLines) return osmLines;
-  const cached = readOsmCache();
-  if(cached){ osmLines = cached; return osmLines; }
-  if(osmLoading) return osmLoading;
-
-  // out geom; 만 써야 멤버 지오메트리가 함께 옵니다 (out tags 를 붙이면 태그만 옵니다)
-  const q = `[out:json][timeout:90];
-(
-  relation["type"="route"]["route"~"^(subway|light_rail|tram)$"](42.85,141.10,43.30,141.65);
-  relation["type"="route"]["route"="train"]["operator"~"JR"](42.85,141.10,43.30,141.65);
-);
-out geom;`;
-
-  osmLoading = (async ()=>{
-    for(const url of OVERPASS_ENDPOINTS){
-      try{
-        const res = await fetch(url, { method:'POST', body:'data='+encodeURIComponent(q),
-          headers:{'Content-Type':'application/x-www-form-urlencoded'} });
-        if(!res.ok) throw new Error('HTTP '+res.status);
-        const data = await res.json();
-        const lines = (data.elements||[]).map(el=>{
-          const t = el.tags||{};
-          return {
-            name: t.name || t['name:ja'] || t.ref || '',
-            nameEn: t['name:en'] || '',
-            nameKo: t['name:ko'] || '',
-            ref: t.ref || '',
-            colour: t.colour || t.color || null,
-            path: stitchWays(el.members||[])
-          };
-        }).filter(l=> l.path.length>3);
-
-        if(!lines.length) throw new Error('노선 0건');
-        osmLines = lines;
-        osmStatus = `노선 ${lines.length}개 불러옴`;
-        writeOsmCache(lines);
-        console.info('[Overpass]', osmStatus, lines.map(l=>l.name));
-        return lines;
-      }catch(e){
-        console.warn('[Overpass] 실패:', url, e.message);
-      }
-    }
-    osmLines = [];
-    osmStatus = '불러오지 못함 (직선으로 표시)';
-    return osmLines;
-  })().finally(()=>{ osmLoading = null; });
-  return osmLoading;
-}
-
-/* AI가 준 노선 이름 → OSM 노선 찾기 */
-function matchOsmLine(lineName){
-  if(!osmLines || !osmLines.length) return null;
-  const n = normText(lineName);
-  if(!n) return null;
-
-  const alias = LINE_ALIAS.find(a=> a.keys.some(k=> n.includes(normText(k))));
-  const wanted = alias ? normText(alias.ja) : n;
-
-  let best=null;
-  for(const l of osmLines){
-    const hay = normText(l.name + l.nameEn + (l.nameKo||'') + l.ref);
-    if(hay.includes(wanted) || (alias && hay.includes(normText(alias.ja.replace('線',''))))){
-      if(!best || l.path.length > best.path.length) best = l;
-    }
-  }
-  if(best) return { path: best.path, color: best.colour || (alias? alias.color : null) || AI_COLOR };
-  return alias ? { path:null, color: alias.color } : null;
-}
-
-/* 선 위에서 두 지점 사이 구간만 잘라냅니다 */
-function nearestIndex(path, pt){
-  let bi=0, bd=Infinity;
-  for(let i=0;i<path.length;i++){
-    const dy=path[i][0]-pt[0], dx=(path[i][1]-pt[1])*0.73;
-    const d=dy*dy+dx*dx;
-    if(d<bd){ bd=d; bi=i; }
-  }
-  return { idx:bi, dist:Math.sqrt(bd)*111 };   // 대략 km
-}
-function sliceLine(path, a, b){
-  const A=nearestIndex(path,a), B=nearestIndex(path,b);
-  if(A.dist>2.0 || B.dist>2.0) return null;    // 역이 노선에서 너무 멀면 포기
-  const [s,e] = A.idx<=B.idx ? [A.idx,B.idx] : [B.idx,A.idx];
-  const seg = path.slice(s, e+1);
-  if(seg.length<2) return null;
-  return A.idx<=B.idx ? seg : seg.slice().reverse();
-}
-
-/* AI가 추정한 대중교통 경로를 지도에 그립니다 */
-async function drawAiRoute(from, to){
-  const route = stopAiRoute(from);
-  if(!route || !Array.isArray(route.steps) || !route.steps.length){
-    drawnKinds.add('transit');
-    drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:ROUTE_STYLE.transit.color, weight:3, dash:'2 7' });
-    renderLegend();
-    return;
-  }
-
-  const hasTransit = route.steps.some(st=> !String(st.mode||'').includes('도보'));
-  if(hasTransit) await loadOsmLines();
-
-  // 실제 노선 데이터로 그릴 수 있는 구간만 먼저 모읍니다
-  const real = [];
-  route.steps.forEach(st=>{
-    if(String(st.mode||'').includes('도보')) return;
-    const a=st.fromAt, b=st.toAt;
-    if(!a || !b) return;
-    const m = matchOsmLine(st.line || st.mode);
-    const seg = (m && m.path) ? sliceLine(m.path, a, b) : null;
-    if(seg) real.push({ seg, color:(m && m.color) || AI_COLOR, st, a, b });
-  });
-
-  if(real.length){
-    drawnKinds.add('osm');
-    // 선로 모양이 확인된 경우: 실제 노선 + 도보 구간
-    real.forEach(r=>{
-      drawPath(r.seg, { color:r.color, weight:6, dash:null });
-      drawStationDot(r.a[0], r.a[1], r.color, `${r.st.from||''} · ${r.st.line||r.st.mode||''} 승차`);
-      drawStationDot(r.b[0], r.b[1], r.color, `${r.st.to||''} · ${r.st.line||r.st.mode||''} 하차`);
-    });
-    route.steps.forEach(st=>{
-      if(!String(st.mode||'').includes('도보')) return;
-      if(st.fromAt && st.toAt){ drawnKinds.add('walk'); drawPath([st.fromAt, st.toAt], ROUTE_STYLE.walk); }
-    });
-    renderLegend();
-    return;
-  }
-
-  // 추정만 있는 경우: 장소와 장소를 직선으로 잇습니다
-  drawnKinds.add('ai');
-  drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:AI_COLOR, weight:4, dash:'10 6' });
-  renderLegend();
-}
-
-/* 선택한 이동수단대로 실제 경로를 그립니다 */
 async function drawRoutesForDay(){
-  if(!HAS_DIR || !dirService){ renderLegend(); return; }
   const token = ++routeToken;
-  const day = currentDay(); if(!day) return;
+  const day = currentDay();
+  if(!day){ renderLegend(); return; }
   const pts = visibleStops(day).filter(s=>!s.tbd && s.lat!=null);
 
   for(let i=0;i<pts.length-1;i++){
     const from=pts[i], to=pts[i+1];
-    const mode=stopMode(from);
-    const r = await requestRoute(from,to,modeToG(mode));
-    if(token!==routeToken) return;        // 그 사이 날짜/수단이 바뀌면 중단
-    if(!r || !r.ok){
-      if(mode==='transit') await drawAiRoute(from, to);
-      else drawPath([[from.lat,from.lng],[to.lat,to.lng]], { color:'#1A1A1E', weight:2, dash:'2 7' });
+    const mode = stopMode(from);
+    const m = MODES.find(x=>x.key===mode) || MODES[0];
+    const straight = [[from.lat,from.lng],[to.lat,to.lng]];
+
+    // 도보만 실제 보행 경로를 따라 그립니다 (나머지는 직선 점선)
+    if(mode==='walk' && HAS_DIR && dirService){
+      const r = await requestRoute(from, to, 'WALKING');
+      if(token!==routeToken) return;                 // 그 사이 날짜·수단이 바뀌면 중단
+      drawnKinds.add('walk');
+      drawPath((r && r.ok && r.overview.length)? r.overview : straight, ROUTE_STYLE.walk);
+      renderLegend();
       continue;
     }
 
-    if(mode==='transit' && (!r.steps || !r.steps.length)){
-      await drawAiRoute(from, to);
-    } else if(mode==='transit' && r.steps.length){
-      r.steps.forEach(st=>{
-        if(st.kind==='transit'){
-          drawnKinds.add('transit');
-          drawPath(st.path, { color: st.color || ROUTE_STYLE.transit.color, weight:6, dash:null });
-          const a=st.path[0], b=st.path[st.path.length-1];
-          if(a) drawStationDot(a[0],a[1], st.color||ROUTE_STYLE.transit.color, `${st.from} · ${st.name} 승차`);
-          if(b) drawStationDot(b[0],b[1], st.color||ROUTE_STYLE.transit.color, `${st.to} · ${st.name} 하차`);
-        } else {
-          drawnKinds.add('walk');
-          drawPath(st.path, ROUTE_STYLE.walk);
-        }
-      });
-    } else if(mode==='walk'){
-      drawnKinds.add('walk');
-      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.walk);
-    } else {
-      drawnKinds.add('drive');
-      drawPath(r.overview.length? r.overview : [], ROUTE_STYLE.drive);
-    }
+    drawnKinds.add(mode);
+    drawPath(straight, { color:m.c, weight:3, dash:'2 8' });
   }
   renderLegend();
 }
+
 function groupViewOf(g){
   const act=g.items.find(it=>it.stop.id===activeStopId);
   return { shown: act || g.items[0], active: !!act, multi: g.items.length>1 };
@@ -1674,7 +1441,7 @@ function bootGoogleMaps(){
   };
   const sc=document.createElement('script');
   sc.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.GOOGLE_MAPS_API_KEY)}&callback=__gmapReady&libraries=places&language=ko&region=JP`;
-  sc.async=true;
+  sc.async=true; sc.crossOrigin='anonymous';
   sc.onerror=()=> console.warn('구글 지도를 불러오지 못해 기본 지도를 사용합니다.');
   document.head.appendChild(sc);
 }
@@ -1811,7 +1578,8 @@ function renderPlanBarMap(){
 function onDayChange(){
   closeForm(); closeDayForm();
   renderPlanBarMap();
-  renderMapForDay(); renderCarousel();
+  try{ renderMapForDay(); }catch(err){ console.error('[지도 렌더]', err); }
+  renderCarousel();
   if(document.getElementById('screen-schedule').classList.contains('active')) renderScheduleScreen();
   playDayAnim();
 }
@@ -1823,7 +1591,9 @@ function renderDayChips(containerId, afterClick){
   TRIP.days.forEach(d=>{
     const el=document.createElement('button');
     el.className='daychip'+(d.id===activeDayId?' active':'');
-    el.innerHTML=`<span class="d">${fmtDate(d.iso)} ${fmtDow(d.iso)}</span><span class="l">${esc(d.label||'일정')}</span>`;
+    const isToday = d.iso === new Date().toISOString().slice(0,10);
+    el.innerHTML=`<span class="d">${fmtDate(d.iso)} ${fmtDow(d.iso)}${isToday? ' <b>오늘</b>':''}</span>`
+      + `<span class="l">${esc(d.label||'일정')}</span>`;
     el.addEventListener('click', ()=>{
       if(activeDayId===d.id) return;
       activeDayId=d.id; activeStopId=null;
@@ -1947,6 +1717,18 @@ function rowEl(s, idx){
       <div class="tc-sub">${esc(sub.join(' · '))}</div>
     </div>
     <span class="tc-caret">›</span>`;
+  // 오늘이면서 지금 시각에 해당하는 일정을 강조합니다
+  const day = currentDay();
+  if(day && day.iso === new Date().toISOString().slice(0,10)){
+    const list = visibleStops(day);
+    const idxInList = list.findIndex(x=>x.id===s.id);
+    const next = list[idxInList+1];
+    const now = new Date();
+    const nowMin = now.getHours()*60 + now.getMinutes();
+    const toMin = (t)=>{ const m=/^(\d{1,2}):(\d{2})$/.exec(t||''); return m? (+m[1])*60+(+m[2]) : null; };
+    const cur = toMin(s.time), nxt = next? toMin(next.time) : 24*60;
+    if(cur!=null && nowMin>=cur && nowMin<nxt) el.classList.add('now');
+  }
   el.addEventListener('click', ()=> openFormAt(el, s.id));
   return el;
 }
@@ -2106,6 +1888,26 @@ async function renderWeather(day){
 }
 
 /* 안 선택 바 */
+/* 안 이름 바꾸기 — 선택된 안을 한 번 더 누르면 열립니다 */
+function renamePlan(day, planId){
+  const ps = dayPlans(day);
+  const target = ps.find(p=>p.id===planId);
+  if(!target) return;
+
+  const input = prompt('이 안의 이름을 입력하세요', target.name);
+  if(input===null) return;                    // 취소
+  const name = input.trim().slice(0, 14);     // 칩이 길어지지 않도록 제한
+  if(!name){ toast('이름을 입력해주세요'); return; }
+  if(name === target.name) return;
+  if(ps.some(p=> p.id!==planId && p.name===name)){ toast('같은 이름의 안이 있어요'); return; }
+
+  target.name = name;
+  target.custom = true;                       // 자동 번호 재정렬에서 제외
+  markChanged();
+  renderScheduleScreen(); renderPlanBarMap(); refreshAll();
+  toast(`'${name}'으로 바꿨어요`);
+}
+
 function renderPlanBar(day, targetId){
   const el=document.getElementById(targetId||'planBar');
   if(!el) return;
@@ -2117,7 +1919,8 @@ function renderPlanBar(day, targetId){
   const many = ps.length>1;
   el.innerHTML = ps.map(p=>`
       <span class="plan-chip ${p.id===act?'on':''}">
-        <button type="button" class="plan-pick" data-plan="${p.id}">
+        <button type="button" class="plan-pick" data-plan="${p.id}"
+                title="${p.id===act? '한 번 더 누르면 이름을 바꿉니다' : esc(p.name)+'로 전환'}">
           ${esc(p.name)}<span class="plan-n">${count(p.id)}</span>
         </button>
         ${(many && p.id===act)? `<button type="button" class="plan-x" data-del="${p.id}" aria-label="${esc(p.name)} 삭제">×</button>`:''}
@@ -2126,7 +1929,8 @@ function renderPlanBar(day, targetId){
 
   el.querySelectorAll('[data-plan]').forEach(b=>{
     b.addEventListener('click', ()=>{
-      if(day.activePlan === b.dataset.plan) return;
+      // 이미 선택된 안을 다시 누르면 이름을 바꿉니다
+      if(day.activePlan === b.dataset.plan){ renamePlan(day, b.dataset.plan); return; }
       day.activePlan=b.dataset.plan; markChanged();
       activeStopId=null; renderScheduleScreen(); renderPlanBarMap(); refreshAll();
     });
@@ -2351,17 +2155,6 @@ async function resolveStation(name){
   return found;
 }
 
-async function geocodeAiRoute(route, from, to){
-  if(!route || !Array.isArray(route.steps)) return route;
-  for(const st of route.steps){
-    if(!st.fromAt) st.fromAt = await resolveStation(st.from);
-    if(!st.toAt)   st.toAt   = await resolveStation(st.to);
-  }
-  const first=route.steps[0], last=route.steps[route.steps.length-1];
-  if(first && !first.fromAt) first.fromAt=[from.lat,from.lng];
-  if(last  && !last.toAt)    last.toAt=[to.lat,to.lng];
-  return route;
-}
 
 /* ---- 일본 공휴일 (Nager.Date, 키 불필요) ---- */
 const holidayCache = {};
@@ -2443,8 +2236,6 @@ async function askAiRoute(from, to, btn, box){
       data = JSON.parse(txt);
     }
 
-    box.innerHTML = `<div class="ai-route loading">경로를 지도에 표시하는 중...</div>`;
-    await geocodeAiRoute(data, from, to);
     setPlanField(currentDay(), from, 'aiRoute', data);
     markChanged();
     box.innerHTML = renderAiRoute(data);
@@ -3745,10 +3536,12 @@ function renderPrep(){
 
 /* ================= NAV ================= */
 function refreshAll(){
-  document.getElementById('tripTitle').textContent = TRIP.title||'여행 일정';
+  const t=document.getElementById('tripTitle');
+  if(t) t.textContent = TRIP.title||'여행 일정';
   renderDayChips('daybar', onDayChange);
   renderPlanBarMap();
-  renderMapForDay(); renderCarousel();
+  try{ renderMapForDay(); }catch(err){ console.error('[지도 렌더]', err); }
+  renderCarousel();
   if(document.getElementById('screen-schedule').classList.contains('active')) renderScheduleScreen();
 }
 function switchScreen(name){
@@ -3759,7 +3552,9 @@ function switchScreen(name){
   if(dock) dock.hidden = (name==='prep');
   if(name==='map'){
     renderDayChips('daybar', onDayChange);
-    renderMapForDay(); renderCarousel();
+    renderPlanBarMap();
+    try{ renderMapForDay(); }catch(err){ console.error('[지도 렌더]', err); }
+    renderCarousel();
     setTimeout(()=>{ if(engine==='leaflet') lmap.invalidateSize(); },60);
   }
   if(name==='schedule'){ closeForm(); closeDayForm(); if(HAS_DIR){ for(const k in routeCache) delete routeCache[k]; } renderScheduleScreen(); }
@@ -3793,8 +3588,7 @@ document.getElementById('statusBtn').addEventListener('click', ()=>{
     ['구글 지도', engine==='google' ? '사용 중' : '기본 지도', engine==='google'],
     ['구글 경로 안내', HAS_DIR? '사용 중':'비활성화', HAS_DIR],
     ['AI 장소 추천', aiLabelMap[aiMode()], aiUsable()],
-    ['친구들과 실시간 공유', HAS_SYNC? '사용 중':'비활성화', HAS_SYNC],
-    ['노선 데이터(OSM)', osmStatus, !!(osmLines && osmLines.length)]
+    ['친구들과 실시간 공유', HAS_SYNC? '사용 중':'비활성화', HAS_SYNC]
   ];
   document.getElementById('statusList').innerHTML = rows.map(([k,label,on])=>
     `<div class="status-row"><span class="k">${k}</span><span class="v ${on?'on':'off'}">${label}</span></div>`
@@ -3815,6 +3609,7 @@ document.getElementById('shareBtn').addEventListener('click', ()=>{
     panel.innerHTML=`
       <p class="sub">이 주소를 친구들에게 보내세요. 한 사람이 일정을 고치면 모두의 화면에 반영돼요.</p>
       <div class="share-box"><input id="shareUrl" readonly value="${base}"><button id="copyBtn">복사</button></div>
+      <button type="button" class="btn-ghost" id="copyTextBtn" style="width:100%;margin-top:8px;">일정을 텍스트로 복사</button>
       <p class="hint">휴대폰 브라우저에서 열고 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있어요.<br>
       아이폰은 공유 버튼 → 홈 화면에 추가, 안드로이드는 메뉴 → 앱 설치를 누르면 됩니다.</p>`;
   } else {
@@ -3822,11 +3617,28 @@ document.getElementById('shareBtn').addEventListener('click', ()=>{
     panel.innerHTML=`
       <p class="sub">현재 일정을 담은 링크예요. 친구가 이 링크를 열면 지금 이 일정이 그대로 보여요.</p>
       <div class="share-box"><input id="shareUrl" readonly value="${url}"><button id="copyBtn">복사</button></div>
+      <button type="button" class="btn-ghost" id="copyTextBtn" style="width:100%;margin-top:8px;">일정을 텍스트로 복사</button>
       <p class="hint">지금은 <b>실시간 공유가 꺼져 있어요.</b> 이 링크는 보내는 순간의 일정을 복사해 전달하는 방식이라,
       이후 각자 수정한 내용은 서로에게 반영되지 않아요.<br>
       함께 편집하려면 관리자가 <code>config.js</code>의 동기화 설정을 채워야 합니다. (README 참고)</p>
       <p class="hint">휴대폰에서 열고 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있어요.</p>`;
   }
+  const txtBtn = document.getElementById('copyTextBtn');
+  if(txtBtn) txtBtn.addEventListener('click', async ()=>{
+    const lines = [];
+    TRIP.days.forEach(d=>{
+      lines.push(`\n[${fmtDate(d.iso)} ${fmtDow(d.iso)}] ${d.label||''}`);
+      const prevActive = d.activePlan;
+      visibleStops(d).forEach(st=>{
+        lines.push(`${fmtClock(st.time)}  ${st.name}${st.opt? ' (선택)':''}`);
+      });
+      d.activePlan = prevActive;
+    });
+    const text = `${TRIP.title||'여행 일정'}\n${lines.join('\n')}`.trim();
+    try{ await navigator.clipboard.writeText(text); toast('일정을 텍스트로 복사했어요'); }
+    catch(e){ toast('복사하지 못했어요'); }
+  });
+
   document.getElementById('copyBtn').addEventListener('click', async ()=>{
     const inp=document.getElementById('shareUrl');
     try{ await navigator.clipboard.writeText(inp.value); toast('링크를 복사했어요'); }
@@ -4020,8 +3832,15 @@ function addSuggestion(item){
 
 /* 예상치 못한 오류를 조용히 넘기지 않도록 */
 window.addEventListener('error', (e)=>{
-  console.error('[오류]', e.message);
-  if(typeof toast==='function') toast('오류가 발생했어요: '+String(e.message).slice(0,60));
+  console.error('[오류]', e.message, e.filename||'', e.lineno||'');
+  // 외부 스크립트에서 난 오류는 브라우저가 내용을 감추고 "Script error."만 줍니다.
+  // 알려도 도움이 안 되고 대개 화면에는 지장이 없어 콘솔에만 남깁니다.
+  const m = String(e.message||'');
+  if(!m || m.startsWith('Script error')) return;
+  if(typeof toast==='function') toast('오류가 발생했어요: '+m.slice(0,60));
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  console.error('[비동기 오류]', e.reason);
 });
 
 /* ================= INIT ================= */
@@ -4048,7 +3867,10 @@ async function init(){
   // 예전 버전 데이터 호환: 지하철/버스 → 대중교통
   TRIP.days.forEach(d=> d.stops.forEach(st=>{ if(st.mode) st.mode = normalizeMode(st.mode); }));
   sortDays();
-  activeDayId = TRIP.days.length? TRIP.days[0].id : null;
+  // 여행 기간 중이면 오늘 날짜를 자동으로 펼칩니다
+  const todayIso = new Date().toISOString().slice(0,10);
+  const todayDay = TRIP.days.find(d=> d.iso === todayIso);
+  activeDayId = todayDay ? todayDay.id : (TRIP.days.length? TRIP.days[0].id : null);
   setSyncLabel(HAS_SYNC? '동기화 중...' : '내 기기 저장');
 
   if(HAS_GMAP) bootGoogleMaps();
