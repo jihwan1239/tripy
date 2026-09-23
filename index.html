@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#2F93DD" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="여행 일정" />
 <meta name="apple-mobile-web-app-title" content="삿포로" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <link rel="manifest" href="manifest.json" />
@@ -91,8 +92,8 @@
   #screen-map{ overflow:hidden; background:#E9E9ED; }
   /* 지도는 상태바 뒤까지 꽉 채우고, 흰 상태바 글씨가 읽히도록 옅은 스크림만 둡니다 */
   #screen-map::before{ content:''; position:absolute; top:0; left:0; right:0; z-index:400;
-    height:calc(34px + env(safe-area-inset-top, 0px)); pointer-events:none;
-    background:linear-gradient(rgba(16,32,48,.34), rgba(16,32,48,0)); }
+    height:calc(20px + env(safe-area-inset-top, 0px)); pointer-events:none;
+    background:linear-gradient(rgba(255,255,255,.92), rgba(255,255,255,0)); }
   #map, #gmap{ position:absolute; inset:0; }
   #gmap{ display:none; }
   .leaflet-tile-pane{ filter:grayscale(78%) contrast(1.05) brightness(1.05); }
@@ -139,7 +140,7 @@
   .daychip.active .d{ opacity:.8; }
 
   .bottom-stack{ position:absolute; left:0; right:0; bottom:0; z-index:500;
-    display:flex; flex-direction:column; gap:9px; padding-bottom:12px; pointer-events:none; }
+    display:flex; flex-direction:column; gap:8px; padding-bottom:8px; pointer-events:none; }
   .bottom-stack > *{ pointer-events:auto; }
   .bottom-row{ display:flex; align-items:center; gap:8px; padding:0 12px; justify-content:space-between; }
   .ai-fab{ flex:0 0 auto; white-space:nowrap;
@@ -188,9 +189,9 @@
     backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
     border-bottom:.5px solid rgba(0,0,0,.07); }
   /* 상태바 뒤 영역 — 흰 글씨가 읽히도록 하늘색으로 채웁니다 */
+  /* 상태바 뒤도 헤더와 같은 흰색으로 이어집니다 */
   .sec-header::before{ content:''; position:absolute; top:0; left:0; right:0;
-    height:env(safe-area-inset-top, 0px);
-    background:linear-gradient(180deg, var(--sky-deep), var(--sky)); }
+    height:env(safe-area-inset-top, 0px); background:#fff; }
   .sec-title-row{ display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; }
   .wx-line{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);
     margin-bottom:12px; letter-spacing:-.01em; min-height:18px; }
@@ -355,12 +356,12 @@
   /* 하단 날짜 도크 */
   .day-dock{ flex:0 0 auto; background:rgba(255,255,255,.9);
     backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
-    border-top:.5px solid rgba(0,0,0,.08); padding:9px 14px; }
+    border-top:.5px solid rgba(0,0,0,.08); padding:8px 14px 7px; }
   .day-dock[hidden]{ display:none; }
   .sched-days{ display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
   .sched-days::-webkit-scrollbar{ display:none; }
   .sched-days .daychip{ box-shadow:none; }
-  .list-body{ padding:14px 16px 40px; }
+  .list-body{ padding:14px 16px 16px; }
   .empty-note.err{ color:var(--red); }
   .err-code{ display:inline-block; margin:8px 0; font-family:var(--font-mono); font-size:11px;
     background:var(--red-soft); border-radius:6px; padding:4px 8px; word-break:break-all; }
@@ -670,7 +671,7 @@
 
   /* ===== PREP ===== */
   #screen-prep{ overflow-y:auto; background:#F5F5F8; }
-  .prep-body{ padding:18px 18px 120px; }
+  .prep-body{ padding:16px 16px 20px; }
   .prep-group{ margin-bottom:22px; }
   .prep-group h2{ font-size:14px; font-weight:600; margin:0 0 9px; padding-left:3px;
     letter-spacing:-.02em; color:var(--muted); display:flex; align-items:center; gap:7px; }
@@ -699,7 +700,7 @@
     background:rgba(255,255,255,.88); backdrop-filter:saturate(180%) blur(20px);
     -webkit-backdrop-filter:saturate(180%) blur(20px);
     padding-bottom:env(safe-area-inset-bottom); z-index:600; }
-  .navbtn{ flex:1; border:none; background:none; padding:11px 4px 10px; display:flex; flex-direction:column;
+  .navbtn{ flex:1; border:none; background:none; padding:9px 4px 7px; display:flex; flex-direction:column;
     align-items:center; gap:5px; color:var(--muted-2); cursor:pointer; }
   .navbtn .icon{ width:20px; height:20px; }
   .navbtn .lb{ font-size:10.5px; font-weight:500; letter-spacing:-.01em; }
@@ -848,13 +849,20 @@
 
   <!-- ============ PREP ============ -->
   <div class="screen" id="screen-prep">
-    <div class="sec-header"><div class="sec-title-row"><h1><span class="h1-emoji">🛂</span>입국 전 준비사항</h1></div></div>
+    <div class="sec-header">
+      <div class="sec-title-row">
+        <h1><span class="h1-emoji">🛂</span>여행 준비물</h1>
+        <button class="mini-btn" id="prepAiBtn"><span class="icon" data-i="star"></span>AI 맞춤</button>
+      </div>
+      <div class="wx-line" id="prepSub"></div>
+    </div>
     <div class="prep-body">
       <div class="progress">
         <div class="top"><span>준비 진행률</span><span id="prepCount">0 / 0</span></div>
         <div class="bar"><div class="fill" id="prepFill"></div></div>
       </div>
-      <p class="prep-caption">체크는 각자 기기에만 저장돼요. 친구 화면에는 반영되지 않습니다.</p>
+      <p class="prep-caption">체크는 각자 기기에만 저장돼요. 친구 화면에는 반영되지 않습니다.
+        <button type="button" class="link-btn" id="prepResetBtn" style="display:inline;padding:0;margin-left:6px;">기본 목록으로</button></p>
       <div id="prepGroups"></div>
     </div>
   </div>
@@ -3727,10 +3735,24 @@ function deleteStop(id){
 let prepState={};
 function loadPrep(){ try{ prepState=JSON.parse(localStorage.getItem(LS_PREP)||'{}'); }catch(e){ prepState={}; } }
 function savePrep(){ try{ localStorage.setItem(LS_PREP, JSON.stringify(prepState)); }catch(e){} }
+/* 이 여행에 적용할 준비물 목록 (AI로 맞춤 생성하면 TRIP.prep 에 저장됩니다) */
+function prepList(){
+  return (TRIP && Array.isArray(TRIP.prep) && TRIP.prep.length) ? TRIP.prep : PREP;
+}
+
 function renderPrep(){
-  const wrap=document.getElementById('prepGroups'); wrap.innerHTML='';
+  const wrap=document.getElementById('prepGroups'); if(!wrap) return;
+  wrap.innerHTML='';
+  const sub=document.getElementById('prepSub');
+  if(sub){
+    const co=tripCountry(), city=(TRIP.country&&TRIP.country.city)||'';
+    const custom = TRIP && Array.isArray(TRIP.prep) && TRIP.prep.length;
+    sub.innerHTML = `<span>${co.flag} ${esc(co.name)}${city? ' · '+esc(city):''}</span>`
+      + (custom? `<span class="wx-sep">·</span><span class="wx-pop">AI 맞춤</span>`
+               : `<span class="wx-sep">·</span><span class="wx-none">기본 목록</span>`);
+  }
   let total=0,done=0;
-  PREP.forEach((g,gi)=>{
+  prepList().forEach((g,gi)=>{
     const gColors=['#2F93DD','#2AA06A','#E0A21C','#EE8038'];
     const gEl=document.createElement('div'); gEl.className='prep-group';
     gEl.innerHTML=`<h2 style="--gc:${gColors[gi % gColors.length]}">${g.group}</h2>`;
@@ -3776,6 +3798,8 @@ function switchScreen(name){
   if(name==='prep'){ renderPrep(); }
 }
 document.querySelectorAll('.navbtn').forEach(b=> b.addEventListener('click', ()=> switchScreen(b.dataset.screen)));
+document.getElementById('prepAiBtn').addEventListener('click', generatePrep);
+document.getElementById('prepResetBtn').addEventListener('click', resetPrep);
 document.getElementById('addStopBtn').addEventListener('click', ()=>{
   const fa=getFormArea();
   document.querySelector('.list-body').appendChild(fa);
@@ -4094,6 +4118,78 @@ async function setTripCity(city){
 /* 나라 변경 — 온보딩 화면을 다시 띄우되 일정은 유지합니다 */
 function showChangeCountry(){
   showOnboarding(true);
+}
+
+/* ---- 준비물을 여행지에 맞게 다시 만들기 ---- */
+async function generatePrep(){
+  const btn = document.getElementById('prepAiBtn');
+  if(!aiUsable()){ toast(`AI 맞춤은 연결이 필요해요. ${DISABLED_MSG}`); return; }
+
+  const co = tripCountry();
+  const city = (TRIP.country && TRIP.country.city) || '';
+  if(TRIP.prep && TRIP.prep.length && !confirm('지금 준비물 목록을 새로 만들까요? 체크 상태는 초기화됩니다.')) return;
+
+  btn.disabled = true;
+  const wrap = document.getElementById('prepGroups');
+  wrap.innerHTML = `<div class="empty-note">${esc(co.name)} 여행에 맞는 준비물을 만드는 중...</div>`;
+
+  const isoList = TRIP.days.map(d=>d.iso).filter(Boolean).sort();
+  const period = isoList.length? `${isoList[0]} ~ ${isoList[isoList.length-1]} (${TRIP.days.length}일)` : '';
+
+  try{
+    let groups;
+    if(aiMode()==='proxy'){
+      const res = await fetch(CFG.AI_PROXY_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ type:'prep', country:co.name, city, period, currency:co.currency })
+      });
+      if(!res.ok) throw new Error('proxy '+res.status);
+      const j = await res.json();
+      groups = j.prep || j.groups || j;
+    } else {
+      const sys = '너는 해외여행 준비를 돕는 도우미야. 목적지 나라에 맞는 준비물·서류·현지 사정을 한국인 여행자 기준으로 정리해. 반드시 JSON 배열만 출력하고 다른 텍스트는 쓰지마. 형식: [{"group":"분류명","items":[{"t":"할 일 제목","d":"한 줄 설명"}]}] 분류는 4개 내외, 각 분류에 항목 2~4개.';
+      const usr = `나라: ${co.name}\n도시: ${city}\n기간: ${period}\n통화: ${co.currency}\n\n`
+        + `입국 서류·비자·전자입국신고, 통신(eSIM/로밍), 결제와 환전, 교통카드, 전압과 콘센트 규격, `
+        + `현지 치안이나 문화적 주의사항, 그 계절 날씨에 맞는 옷차림을 고려해서 만들어줘.`;
+      const res = await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+personalKey()},
+        body: JSON.stringify({ model:CFG.OPENAI_MODEL, temperature:0.5,
+          messages:[{role:'system',content:sys},{role:'user',content:usr}] })
+      });
+      if(!res.ok) throw new Error('openai '+res.status);
+      const j = await res.json();
+      const txt=(j.choices?.[0]?.message?.content||'').replace(/```json|```/g,'').trim();
+      groups = JSON.parse(txt);
+    }
+
+    if(!Array.isArray(groups) || !groups.length) throw new Error('empty');
+    // 형태 검증 후 저장
+    TRIP.prep = groups.slice(0,6).map(g=>({
+      group: String(g.group||'준비물').slice(0,24),
+      items: (Array.isArray(g.items)? g.items : []).slice(0,6).map(it=>({
+        t: String(it.t||'').slice(0,60),
+        d: String(it.d||'').slice(0,160)
+      })).filter(it=>it.t)
+    })).filter(g=>g.items.length);
+
+    prepState = {}; savePrep();
+    markChanged();
+    renderPrep();
+    toast(`${co.name} 여행에 맞게 준비물을 만들었어요`);
+  }catch(e){
+    console.warn('[준비물 AI]', e);
+    renderPrep();
+    toast('준비물을 만들지 못했어요');
+  }finally{ btn.disabled=false; }
+}
+
+function resetPrep(){
+  if(!confirm('기본 준비물 목록으로 되돌릴까요?')) return;
+  delete TRIP.prep;
+  prepState = {}; savePrep();
+  markChanged(); renderPrep();
+  toast('기본 목록으로 되돌렸어요');
 }
 
 /* ================= 온보딩 ================= */
