@@ -16,12 +16,12 @@ window.APP_CONFIG = {
 
   /* Google Maps JavaScript API 키.
      비워두면 기본 지도(OpenStreetMap)가 표시됩니다. */
-  GOOGLE_MAPS_API_KEY: "AIzaSyC7ZEN2XXin5XQcOVUP_WxiD8pPaGnQfCg",
+  GOOGLE_MAPS_API_KEY: "",
 
   /* true로 두면 위 키를 이용해 실제 경로 기반 소요시간을 계산합니다.
      (Google Cloud에서 Directions API도 함께 활성화 필요)
      false거나 지도 키가 없으면 거리 기반 추정치로 표시됩니다. */
-  ENABLE_DIRECTIONS: true,
+  ENABLE_DIRECTIONS: false,
 
 
   /* ========== 2. AI 장소 추천 ========== */
@@ -33,7 +33,7 @@ window.APP_CONFIG = {
 
      예: "https://sapporo-ai.내계정.workers.dev"
      비워두면 각자 자기 키를 입력해서 쓰는 방식으로 동작합니다. */
-  AI_PROXY_URL: "https://sapporo-ai.chepicky.workers.dev",
+  AI_PROXY_URL: "",
 
   /* 프록시가 없을 때, 사용자가 직접 자기 OpenAI 키를 넣어 쓸 수 있게 할지 여부.
      키는 그 사람 기기에만 저장되고 다른 사람에게 전달되지 않습니다.
@@ -53,8 +53,15 @@ window.APP_CONFIG = {
 
      설정 방법은 README.md의 "친구들과 공유하기" 항목을 보세요. */
 
-  SUPABASE_URL: "https://vgcumkqgznrratmmesxz.supabase.co",        // 예: https://xxxxxxxx.supabase.co
-  SUPABASE_ANON_KEY: "sb_publishable_fDpApI-Yz0o2Oo_7d3DxgA_xB14GbHE",   // Supabase의 anon public 키
-  TRIP_ID: "sapporo-2026"  // 여행방 이름. 친구들과 같은 값을 쓰면 같은 일정을 봅니다.
+  SUPABASE_URL: "",        // 예: https://xxxxxxxx.supabase.co
+  SUPABASE_ANON_KEY: "",   // Supabase의 anon public 키
+
+  /* 기본 여행방 이름.
+     실제로는 주소의 ?trip=xxxx 값이 여행방을 결정합니다.
+     앱에서 "새 여행 만들기"를 누르면 임의의 방 ID가 만들어지고,
+     그 링크를 받은 사람만 같은 일정을 함께 봅니다.
+     아래 값은 ?trip 없이 접속했을 때 쓰이는 기본방입니다. */
+  TRIP_ID: "trip-default"
+
 
 };

@@ -3,7 +3,7 @@
    index.html이나 config.js를 수정했는데 반영이 안 되면
    아래 CACHE 버전 숫자를 올려주세요. */
 
-const CACHE = 'sapporo-trip-v1';
+const CACHE = 'sapporo-trip-v42';
 const ASSETS = [
   './',
   './index.html',
